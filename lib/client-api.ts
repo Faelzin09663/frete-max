@@ -1,4 +1,5 @@
 import type { Leg, Local, Oferta } from "./types.ts";
+import { comprimirImagens } from "./imagem.ts";
 import { novoId } from "./storage.ts";
 
 const CACHE_KEY = "fretemax:rotas";
@@ -43,7 +44,8 @@ export async function getLeg(a: Local, b: Local): Promise<Leg> {
 export async function extrairOfertas(texto: string, imagens: File[]): Promise<Oferta[]> {
   const fd = new FormData();
   fd.set("texto", texto);
-  imagens.forEach((f) => fd.append("imagens", f));
+  const comprimidas = await comprimirImagens(imagens);
+  comprimidas.forEach((f) => fd.append("imagens", f));
   const r = await fetch("/api/extract", { method: "POST", body: fd });
   const data = await r.json();
   if (!r.ok) throw new Error(data?.error ?? "Erro ao ler a mensagem.");

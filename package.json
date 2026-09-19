@@ -9,6 +9,8 @@
     "test": "node --experimental-strip-types scripts/test-calc.ts"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.5.2",
+    "@supabase/supabase-js": "^2.45.4",
     "leaflet": "^1.9.4",
     "next": "^15.0.0",
     "react": "^19.0.0",

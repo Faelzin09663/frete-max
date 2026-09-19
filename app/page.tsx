@@ -1,7 +1,9 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { LocalForm } from "@/components/LocalForm";
+import { consumirCompartilhado } from "@/lib/compartilhado.ts";
 import { NumInput } from "@/components/NumInput";
 import { OfferCard, type Selo } from "@/components/OfferCard";
 import { calcular, parseHora, valorEfetivo } from "@/lib/calc.ts";
@@ -22,6 +24,8 @@ function horaAgora(): string {
 }
 
 export default function CargasPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [truck, , truckPronto] = useTruck();
   const [locais, setLocais, locaisPronto] = useLocais();
 
@@ -40,6 +44,25 @@ export default function CargasPage() {
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => setAgora(horaAgora()), []);
+
+  // conteúdo recebido pelo "Compartilhar" do WhatsApp (veja app/compartilhar)
+  useEffect(() => {
+    if (searchParams.get("compartilhado") === "1") {
+      const dados = consumirCompartilhado();
+      if (dados) {
+        if (dados.texto) setTexto(dados.texto);
+        if (dados.imagens.length > 0) setImagens(dados.imagens);
+      }
+      router.replace("/");
+    } else if (searchParams.get("texto")) {
+      setTexto(searchParams.get("texto") ?? "");
+      if (searchParams.get("semSw") === "1") {
+        setErro("Recebi o texto, mas não a imagem. Se era um print, envie de novo por aqui.");
+      }
+      router.replace("/");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const ton = toneladas ?? truck.capacidadeT;
   const base = comRetorno ? locais.find((l) => l.id === truck.baseLocalId) ?? null : null;

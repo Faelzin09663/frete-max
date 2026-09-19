@@ -76,7 +76,50 @@ troque por um provedor de tiles com plano próprio (em `components/RouteMap.tsx`
 - Horário de viabilidade considera só o mesmo dia.
 - Valor sem unidade ("Tarifa: 45,00") é tratado como por tonelada, com aviso na tela.
 
-## Próximos passos (Fase 2)
+## Fase 3 (parcial): conta e sincronização + PWA com "Compartilhar" (Android)
 
-Histórico de preço por rota, comparar retorno por região, viabilidade de descarga,
-salvar viagens concluídas para o dashboard semanal.
+**Conta (opcional).** Tela `/conta`: login por link mágico (e-mail), sem senha. Sem entrar,
+nada muda — continua tudo salvo só no aparelho. Entrando, `lib/storage.ts` passa a
+sincronizar **Caminhão** e **Locais** com o Supabase em segundo plano (local-first: a tela
+nunca espera a rede, e volta a funcionar offline se a conexão cair). Na primeira vez que
+loga numa conta nova, o que já estava salvo no aparelho é enviado para a nuvem uma única vez.
+**Cargas continuam só no aparelho** (não fazem parte da Fase 3 ainda).
+
+Para ativar:
+1. Crie um projeto grátis em [supabase.com](https://supabase.com).
+2. No SQL Editor do projeto, rode o arquivo `supabase/schema.sql` (cria as tabelas e as regras
+   de segurança — cada motorista só vê os próprios dados).
+3. Em Project Settings → API, copie a **Project URL** e a chave **anon public** (nunca a
+   `service_role`) para `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_ANON_KEY` no `.env.local`.
+4. Em Authentication → URL Configuration, adicione `http://localhost:3000/auth/callback` (e depois
+   a URL de produção, ex. `https://seusite.vercel.app/auth/callback`) nas Redirect URLs.
+
+Sem preencher essas chaves, a tela `/conta` avisa que a sincronização não está configurada e
+o resto do site funciona normal.
+
+**PWA com "Compartilhar" (Android).** Com `public/manifest.json` + `public/sw.js`, depois de
+instalado ("Adicionar à tela inicial" no Chrome), o FreteMax aparece na lista de compartilhamento
+do Android. Ele abre uma mensagem no WhatsApp → Compartilhar → FreteMax, e o texto (ou o print)
+já chega preenchido na tela de Cargas, sem copiar e colar. Funciona só depois de instalado e só
+no Android/ChromeOS — no iPhone, essa função não existe (ver `README` da conversa original);
+lá ele continua copiando e colando ou usando o print normalmente.
+Detalhe técnico: o `sw.js` intercepta o POST do Android e guarda o conteúdo no Cache Storage;
+`app/compartilhar/pronto` lê o cache e entrega para a tela de Cargas via `lib/compartilhado.ts`.
+`app/compartilhar/route.ts` é só uma rede de segurança para antes do service worker estar ativo
+(nesse caso raro, o texto chega mas a imagem não, e a tela avisa).
+
+**Compressão de imagem.** Prints grandes são reduzidos no navegador (`lib/imagem.ts`, até 1600px
+no lado maior) antes de enviar pro `/api/extract`, pra gastar menos do plano de dados dele.
+
+### O que eu não consegui testar aqui
+Sem internet nem `npm install` neste ambiente, não rodei nada desta parte — nem o login, nem a
+sincronização, nem o compartilhamento do Android. Revisei o código com cuidado, mas é essencial
+testar na prática, principalmente:
+- O fluxo de login por link mágico ponta a ponta (e-mail → `/auth/callback` → `/conta`).
+- Compartilhar uma mensagem do WhatsApp pro FreteMax instalado num Android de verdade.
+- Editar um local ou o caminhão logado em dois aparelhos e ver se sincroniza nos dois.
+
+## Próximos passos (Fase 4)
+
+Viagens concluídas, dashboard semanal, exportação para planilha, leitura de tíquete de descarga,
+histórico de preço por rota, sugestão de retorno por região.

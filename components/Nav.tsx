@@ -6,6 +6,7 @@ const ITENS = [
   { href: "/", label: "Cargas" },
   { href: "/locais", label: "Locais" },
   { href: "/caminhao", label: "Caminhão" },
+  { href: "/conta", label: "Conta" },
 ];
 
 export function Nav() {

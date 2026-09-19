@@ -87,14 +87,11 @@ export async function POST(req: Request) {
 
   if (!r.ok) {
     const detalhe = await r.text();
-    console.error(`[API /api/extract] Gemini retornou status ${r.status}:`, detalhe);
     return NextResponse.json({ error: `Gemini respondeu ${r.status}`, detalhe }, { status: 502 });
   }
 
   const data = await r.json();
-  const partsList = data?.candidates?.[0]?.content?.parts as Array<{ text?: string; thought?: boolean }> | undefined;
-  const textPart = partsList?.find((p) => p.text && !p.thought) ?? partsList?.[0];
-  const raw: string | undefined = textPart?.text;
+  const raw: string | undefined = data?.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!raw) return NextResponse.json({ error: "Resposta vazia do Gemini." }, { status: 502 });
 
   try {
