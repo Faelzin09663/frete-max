@@ -67,7 +67,7 @@ export async function POST(req: Request) {
     parts.push({ inlineData: { mimeType: f.type || "image/png", data: buf.toString("base64") } });
   }
 
-  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  const model = process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
   const r = await fetch(url, {
     method: "POST",
@@ -76,7 +76,9 @@ export async function POST(req: Request) {
       systemInstruction: { parts: [{ text: PROMPT }] },
       contents: [{ role: "user", parts }],
       generationConfig: {
-        temperature: 0,
+        // Gemini 3: não mexer na temperatura (o Google recomenda o padrão 1.0).
+        // Extração é tarefa simples, então pouco "raciocínio" já basta e sai mais barato.
+        thinkingConfig: { thinkingLevel: process.env.GEMINI_THINKING_LEVEL || "low" },
         responseMimeType: "application/json",
         responseSchema: SCHEMA,
       },
@@ -85,11 +87,14 @@ export async function POST(req: Request) {
 
   if (!r.ok) {
     const detalhe = await r.text();
+    console.error(`[API /api/extract] Gemini retornou status ${r.status}:`, detalhe);
     return NextResponse.json({ error: `Gemini respondeu ${r.status}`, detalhe }, { status: 502 });
   }
 
   const data = await r.json();
-  const raw: string | undefined = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  const partsList = data?.candidates?.[0]?.content?.parts as Array<{ text?: string; thought?: boolean }> | undefined;
+  const textPart = partsList?.find((p) => p.text && !p.thought) ?? partsList?.[0];
+  const raw: string | undefined = textPart?.text;
   if (!raw) return NextResponse.json({ error: "Resposta vazia do Gemini." }, { status: 502 });
 
   try {

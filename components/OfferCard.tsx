@@ -1,7 +1,9 @@
 "use client";
+import { useState } from "react";
 import { NumInput } from "@/components/NumInput";
+import { RouteMap } from "@/components/RouteMap";
 import { fmtHoras, fmtKm, fmtRS, fmtRS0 } from "@/lib/format.ts";
-import type { CalcResult, Oferta } from "@/lib/types.ts";
+import type { CalcResult, MapaDados, Oferta } from "@/lib/types.ts";
 
 export type Selo = "LUCRO" | "HORA";
 
@@ -16,6 +18,7 @@ export function OfferCard({
   origemNome,
   destinoNome,
   calc,
+  mapa,
   selos,
   onEditar,
 }: {
@@ -23,9 +26,11 @@ export function OfferCard({
   origemNome: string;
   destinoNome: string;
   calc: CalcResult;
+  mapa: MapaDados | null;
   selos: Selo[];
   onEditar: (patch: Partial<Oferta>) => void;
 }) {
+  const [mapaAberto, setMapaAberto] = useState(false);
   const semValor = oferta.valor == null && oferta.valorManual == null;
   const positivo = calc.lucroRS >= 0;
   const viab = calc.viabilidade !== "DESCONHECIDA" ? VIAB[calc.viabilidade] : null;
@@ -91,6 +96,13 @@ export function OfferCard({
           {a}
         </div>
       ))}
+
+      {mapa && (
+        <details onToggle={(e) => setMapaAberto((e.currentTarget as HTMLDetailsElement).open)}>
+          <summary>Ver no mapa</summary>
+          {mapaAberto && <RouteMap dados={mapa} />}
+        </details>
+      )}
 
       <details>
         <summary>Ver a conta</summary>

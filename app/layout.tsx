@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Barlow, Barlow_Condensed } from "next/font/google";
+import "leaflet/dist/leaflet.css";
 import "./globals.css";
 import { Nav } from "@/components/Nav";
 

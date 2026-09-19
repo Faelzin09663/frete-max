@@ -104,3 +104,8 @@ table.break tr.total td { font-weight: 700; border-bottom: 0; }
 .list-item strong { font-family: var(--font-num); font-size: 22px; }
 .spin { color: var(--muted); padding: 10px 0; }
 @media (prefers-reduced-motion: no-preference) { button { transition: transform 0.05s; } button:active { transform: scale(0.98); } }
+
+/* mapa */
+.map { height: 300px; border: 2px solid var(--ink); border-radius: var(--radius); margin-top: 10px; position: relative; z-index: 0; background: #dfe5df; }
+.linkbtn { display: block; text-align: center; text-decoration: none; background: transparent; color: var(--ink); line-height: 28px; }
+.leaflet-tooltip { font-family: var(--font-body); font-weight: 700; }

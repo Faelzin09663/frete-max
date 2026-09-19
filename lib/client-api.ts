@@ -20,7 +20,7 @@ export async function getLeg(a: Local, b: Local): Promise<Leg> {
   const cache = lerCache();
   const k = chave(a, b);
   // estimativas não ficam em cache, para serem refeitas quando a chave do Google for configurada
-  if (cache[k] && !cache[k].estimado) return cache[k];
+  if (cache[k] && !cache[k].estimado && cache[k].poly) return cache[k];
 
   const r = await fetch("/api/route", {
     method: "POST",

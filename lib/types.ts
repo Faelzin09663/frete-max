@@ -48,6 +48,7 @@ export type Leg = {
   min: number;
   tollRS: number;
   estimado: boolean; // true = sem Google, linha reta x fator
+  poly?: string; // traçado da rota (polyline codificada do Google)
 };
 
 export type Viabilidade = "OK" | "ARRISCADO" | "INVIAVEL" | "DESCONHECIDA";
@@ -71,4 +72,12 @@ export type CalcResult = {
   margemMin: number | null; // minutos de folga até o limite de carregamento
   estimado: boolean;
   avisos: string[];
+};
+
+export type Ponto = [number, number]; // [lat, lng]
+
+export type MapaDados = {
+  segmentos: { tipo: "VAZIO" | "CHEIO"; pontos: Ponto[] }[];
+  marcadores: { nome: string; lat: number; lng: number; papel: "POSICAO" | "ORIGEM" | "DESTINO" | "BASE" }[];
+  linkGoogle: string;
 };

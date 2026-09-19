@@ -7,11 +7,12 @@ import { OfferCard, type Selo } from "@/components/OfferCard";
 import { calcular, parseHora, valorEfetivo } from "@/lib/calc.ts";
 import { extrairOfertas, getLeg } from "@/lib/client-api.ts";
 import { acharLocal, normalizar } from "@/lib/match.ts";
+import { montarMapa } from "@/lib/mapa.ts";
 import { fmtNum } from "@/lib/format.ts";
 import { useLocais, useTruck } from "@/lib/storage.ts";
-import type { CalcResult, Leg, Local, Oferta } from "@/lib/types.ts";
+import type { CalcResult, Leg, Local, MapaDados, Oferta } from "@/lib/types.ts";
 
-type Linha = { oferta: Oferta; origem: Local | null; destino: Local | null; calc: CalcResult | null };
+type Linha = { oferta: Oferta; origem: Local | null; destino: Local | null; calc: CalcResult | null; mapa?: MapaDados };
 
 const ZERO: Leg = { km: 0, min: 0, tollRS: 0, estimado: false };
 
@@ -84,6 +85,7 @@ export default function CargasPage() {
             origem,
             destino,
             calc: calcular({ oferta, truck, toneladas: ton, vazio, cheio, retorno, agoraMin: pos ? agoraMin : null }),
+            mapa: montarMapa(pos, origem, destino, base, vazio, cheio, retorno),
           });
         } catch (e) {
           setErro(e instanceof Error ? e.message : "Erro ao calcular rotas.");
@@ -229,6 +231,7 @@ export default function CargasPage() {
               origemNome={l.origem!.apelido}
               destinoNome={l.destino!.apelido}
               calc={l.calc}
+              mapa={l.mapa ?? null}
               selos={seloDe(l.oferta.id)}
               onEditar={(p) => editar(l.oferta.id, p)}
             />
@@ -247,6 +250,7 @@ export default function CargasPage() {
               origemNome={l.origem!.apelido}
               destinoNome={l.destino!.apelido}
               calc={l.calc}
+              mapa={l.mapa ?? null}
               selos={[]}
               onEditar={(p) => editar(l.oferta.id, p)}
             />

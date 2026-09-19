@@ -2,7 +2,7 @@
 
 Cole a mensagem de carga do WhatsApp (ou o print) e veja qual carga dá mais lucro,
 considerando km vazio, km cheio, diesel, pedágio e tempo.
-6
+
 **Como funciona:** o Gemini só *lê* a mensagem e devolve dados estruturados.
 Quem faz a conta (lucro, lucro por hora, viabilidade de horário) é código normal em `lib/calc.ts`,
 com testes. Assim o resultado é sempre o mesmo e dá para conferir.
@@ -20,7 +20,7 @@ npm test                       # testes do cálculo
 
 | Variável | Para quê | Onde criar |
 |---|---|---|
-| `GEMINI_API_KEY` | Ler mensagens e prints | https://aistudio.google.com/apikey |
+| `GEMINI_API_KEY` | Ler mensagens e prints (modelo `gemini-3.1-flash-lite`, troque em `GEMINI_MODEL`) | https://aistudio.google.com/apikey |
 | `GOOGLE_MAPS_API_KEY` | Endereço → coordenadas e rotas com pedágio | Google Cloud: ativar **Geocoding API** e **Routes API** |
 
 Sem `GOOGLE_MAPS_API_KEY` o app ainda funciona: distâncias são estimadas (linha reta × 1,35)
@@ -56,8 +56,18 @@ lib/match.ts       liga "Tejucana - Rocha (Brumadinho)" ao local cadastrado
 app/api/extract    Gemini: texto/imagem -> JSON de ofertas
 app/api/geocode    endereço -> coordenadas
 app/api/route      Google Routes: km, tempo e pedágio (com cache no navegador)
+lib/mapa.ts        monta os trechos (vazio/cheio) e o link do Google Maps
+components/RouteMap.tsx  mapa Leaflet + OpenStreetMap (sem chave extra)
 app/               telas: Cargas, Locais, Caminhão
 ```
+
+## Mapa
+
+Cada carga tem "Ver no mapa": trecho vazio tracejado, trecho cheio em linha grossa, e o botão
+"Abrir no Google Maps" para navegar. O traçado vem do Routes API (sem chamada extra).
+Sem chave do Google, o mapa mostra linhas retas entre os pontos.
+Os mapas usam os tiles públicos do OpenStreetMap, bons para uso pessoal; se o app crescer,
+troque por um provedor de tiles com plano próprio (em `components/RouteMap.tsx`).
 
 ## Limites conhecidos do MVP
 

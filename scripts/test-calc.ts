@@ -1,5 +1,7 @@
 import { calcular, parseHora } from "../lib/calc.ts";
 import { acharLocal } from "../lib/match.ts";
+import { decodePolyline } from "../lib/polyline.ts";
+import { montarMapa } from "../lib/mapa.ts";
 import type { Oferta, Truck, Local } from "../lib/types.ts";
 
 const truck: Truck = {
@@ -63,6 +65,20 @@ eq("match exato", acharLocal("SETE LAGOAS", locais)?.id, "b");
 eq("match sinônimo", acharLocal("Tejucana - Rocha", locais)?.id, "a");
 eq("match contido", acharLocal("Tejucana - Rocha (Brumadinho)", locais)?.id, "a");
 eq("sem match", acharLocal("Extrativa", locais), null);
+
+// Polyline (exemplo oficial da documentação do Google)
+const dec = decodePolyline("_p~iF~ps|U_ulLnnqC_mqNvxq`@");
+eq("polyline: 3 pontos", dec.length, 3);
+eq("polyline: ponto 1", dec[0], [38.5, -120.2]);
+eq("polyline: ponto 3", dec[2], [43.252, -126.453]);
+
+const L = (id: string, lat: number, lng: number): Local => ({ id, apelido: id, sinonimos: [], endereco: "", lat, lng });
+const m = montarMapa(L("p", -19.9, -43.9), L("o", -19.5, -44.0), L("d", -19.4, -44.2), null, leg(10, 10), leg(20, 20), null);
+eq("mapa: 2 segmentos (vazio+cheio)", m.segmentos.map((s) => s.tipo), ["VAZIO", "CHEIO"]);
+eq("mapa: 3 marcadores", m.marcadores.length, 3);
+eq("mapa: link com waypoint", m.linkGoogle.includes("waypoints=-19.5%2C-44"), true);
+const m2 = montarMapa(null, L("o", -19.5, -44.0), L("d", -19.4, -44.2), null, leg(0, 0), leg(20, 20), null);
+eq("mapa sem posição: só cheio", m2.segmentos.map((s) => s.tipo), ["CHEIO"]);
 
 console.log(falhas === 0 ? "\nTodos os testes passaram." : `\n${falhas} falha(s).`);
 process.exit(falhas ? 1 : 0);

@@ -30,13 +30,14 @@ export async function POST(req: Request) {
     headers: {
       "Content-Type": "application/json",
       "X-Goog-Api-Key": key,
-      "X-Goog-FieldMask": "routes.distanceMeters,routes.duration,routes.travelAdvisory.tollInfo",
+      "X-Goog-FieldMask": "routes.distanceMeters,routes.duration,routes.travelAdvisory.tollInfo,routes.polyline.encodedPolyline",
     },
     body: JSON.stringify({
       origin: { location: { latLng: { latitude: origem.lat, longitude: origem.lng } } },
       destination: { location: { latLng: { latitude: destino.lat, longitude: destino.lng } } },
       travelMode: "DRIVE",
       routingPreference: "TRAFFIC_UNAWARE",
+      polylineQuality: "OVERVIEW",
       extraComputations: ["TOLLS"],
       routeModifiers: { vehicleInfo: { emissionType: "DIESEL" } },
       languageCode: "pt-BR",
@@ -60,6 +61,6 @@ export async function POST(req: Request) {
     .filter((p) => !p.currencyCode || p.currencyCode === "BRL")
     .reduce((s, p) => s + Number(p.units ?? 0) + (p.nanos ?? 0) / 1e9, 0);
 
-  const leg: Leg = { km, min, tollRS, estimado: false };
+  const leg: Leg = { km, min, tollRS, estimado: false, poly: route.polyline?.encodedPolyline };
   return NextResponse.json(leg);
 }
