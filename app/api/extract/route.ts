@@ -4,10 +4,12 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const PROMPT = `Você extrai ofertas de frete de mensagens de WhatsApp de grupos de caminhoneiros (Minas Gerais, Brasil).
-A entrada pode ser texto colado e/ou prints de conversa. Devolva UMA entrada para cada rota/fluxo distinto.
+A entrada pode conter VÁRIAS divulgações coladas em sequência e/ou prints de conversa. Devolva UMA entrada para cada rota/fluxo distinto, mesmo quando várias ofertas estiverem no mesmo texto.
 
 Regras:
 - "A x B" ou "A X B" significa origem A e destino B. "A para B" também. Uma mensagem de programação pode ter vários fluxos: separe todos.
+- Quando aparecer uma nova origem, novo destino, novo preço/frete ou um novo bloco de divulgação (por exemplo, após um telefone, várias linhas vazias ou uma nova linha com ✅), comece uma nova oferta. Nunca misture preço, horário, contato ou observações de um bloco com outro.
+- Se um bloco tiver origem e destino escritos em linhas separadas, associe o preço e os horários daquele bloco à rota correspondente. No exemplo "TEJUCANA - ROCHA (Brumadinho) para: SETE LAGOAS", a origem é "TEJUCANA - ROCHA (Brumadinho)" e o destino é "SETE LAGOAS".
 - origemTexto/destinoTexto: copie o nome como aparece, sem emojis. Se houver cidade entre parênteses, mantenha (ex.: "Tejucana - Rocha (Brumadinho)").
 - valor: número em reais (45,00 -> 45). Se não houver preço para o fluxo, use null. NUNCA invente valores.
 - unidade: "TONELADA" se disser ton./tonelada/t, "VIAGEM" se for valor fechado por viagem, senão "DESCONHECIDA". "Tarifa" sozinha sem unidade = "DESCONHECIDA".

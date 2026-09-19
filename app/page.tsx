@@ -46,23 +46,12 @@ export default function CargasPage() {
 
   useEffect(() => setAgora(horaAgora()), []);
 
-  function atualizarMensagem(id: string, patch: Partial<Mensagem>) {
-    setMensagens((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+  function atualizarMensagem(patch: Partial<Mensagem>) {
+    setMensagens((prev) => [{ ...prev[0], ...patch }]);
   }
-  function adicionarMensagem() {
-    setMensagens((prev) => [...prev, mensagemVazia()]);
-  }
-  function removerMensagem(id: string) {
-    setMensagens((prev) => (prev.length > 1 ? prev.filter((m) => m.id !== id) : prev));
-  }
-  // usado pelo handoff do "Compartilhar": preenche o primeiro bloco vazio, ou cria um novo
+  // usado pelo handoff do "Compartilhar": preenche o campo único
   function definirMensagemUnica(texto: string, imagens: File[]) {
-    setMensagens((prev) => {
-      if (prev.length === 1 && !prev[0].texto.trim() && prev[0].imagens.length === 0) {
-        return [{ ...prev[0], texto, imagens }];
-      }
-      return [...prev, { id: novoId(), texto, imagens }];
-    });
+    setMensagens((prev) => [{ ...prev[0], texto, imagens }]);
   }
 
   // conteúdo recebido pelo "Compartilhar" do WhatsApp (veja app/compartilhar)
@@ -92,16 +81,12 @@ export default function CargasPage() {
     setErro(null);
     setLendo(true);
     try {
-      const rotular = mensagensPreenchidas.length > 1;
-      const resultados = await Promise.allSettled(
-        mensagensPreenchidas.map((m) => extrairOfertas(m.texto, m.imagens)),
-      );
+      const resultados = await Promise.allSettled(mensagensPreenchidas.map((m) => extrairOfertas(m.texto, m.imagens)));
       const novas: Oferta[] = [];
       let falhas = 0;
-      resultados.forEach((r, i) => {
+      resultados.forEach((r) => {
         if (r.status === "fulfilled") {
-          const rotulo = rotular ? `Mensagem ${i + 1}` : undefined;
-          novas.push(...r.value.map((o) => (rotulo ? { ...o, origemMsg: rotulo } : o)));
+          novas.push(...r.value);
         } else {
           falhas++;
         }
@@ -109,8 +94,8 @@ export default function CargasPage() {
       if (falhas > 0) {
         setErro(
           falhas === mensagensPreenchidas.length
-            ? "Não consegui ler nenhuma das mensagens."
-            : `Não consegui ler ${falhas} de ${mensagensPreenchidas.length} mensagens. As outras foram analisadas.`,
+            ? "Não consegui ler a mensagem."
+            : `Não consegui ler ${falhas} parte(s) da mensagem. As outras foram analisadas.`,
         );
       } else if (novas.length === 0) {
         setErro("Não encontrei nenhuma carga nessas mensagens.");
@@ -209,7 +194,7 @@ export default function CargasPage() {
   return (
     <>
       <h1>Qual carga vale mais?</h1>
-      <p className="lead">Cole uma ou várias mensagens do grupo, ou envie o print. Eu mostro o lucro de cada carga e comparo qual vale mais.</p>
+      <p className="lead">Cole uma ou várias ofertas na mesma mensagem, ou envie os prints. Eu separo cada carga, calculo o lucro e comparo qual rota vale mais.</p>
 
       {semLocais && (
         <div className="note">
@@ -218,43 +203,24 @@ export default function CargasPage() {
       )}
 
       <div className="panel">
-        {mensagens.map((m, i) => (
-          <div key={m.id} className={i > 0 ? "msg-bloco" : undefined}>
-            {mensagens.length > 1 && (
-              <div className="msg-head">
-                <strong>Mensagem {i + 1}</strong>
-                <button type="button" className="small danger" onClick={() => removerMensagem(m.id)}>
-                  Remover
-                </button>
-              </div>
-            )}
-            <label htmlFor={`msg-${m.id}`}>Mensagem</label>
-            <textarea
-              id={`msg-${m.id}`}
-              value={m.texto}
-              onChange={(e) => atualizarMensagem(m.id, { texto: e.target.value })}
-              placeholder="Cole aqui o texto encaminhado do WhatsApp"
-            />
-            <label htmlFor={`img-${m.id}`}>Ou print da conversa</label>
-            <input
-              id={`img-${m.id}`}
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={(e) => atualizarMensagem(m.id, { imagens: Array.from(e.target.files ?? []) })}
-            />
-            {m.imagens.length > 0 && <div className="hint">{m.imagens.length} imagem(ns) selecionada(s)</div>}
-          </div>
-        ))}
-
-        <div className="actions">
-          <button type="button" className="sec" onClick={adicionarMensagem}>
-            + Adicionar outra mensagem
-          </button>
-        </div>
+        <label htmlFor={`msg-${mensagens[0].id}`}>Mensagem com uma ou várias cargas</label>
+        <textarea
+          id={`msg-${mensagens[0].id}`}
+          value={mensagens[0].texto}
+          onChange={(e) => atualizarMensagem({ texto: e.target.value })}
+          placeholder="Cole aqui todas as mensagens/ofertas do WhatsApp. A IA vai separar cada origem e destino automaticamente."
+        />
+        <label htmlFor={`img-${mensagens[0].id}`}>Ou envie os prints da conversa</label>
+        <input
+          id={`img-${mensagens[0].id}`}
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={(e) => atualizarMensagem({ imagens: Array.from(e.target.files ?? []) })}
+        />
+        {mensagens[0].imagens.length > 0 && <div className="hint">{mensagens[0].imagens.length} imagem(ns) selecionada(s)</div>}
         <p className="hint">
-          Recebeu várias cargas separadas? Cole cada uma num bloco diferente pra eu não misturar os dados — e eu
-          comparo todas de uma vez.
+          Pode colar várias divulgações seguidas, mesmo que cada uma tenha origem, destino e preço diferentes. Eu separo tudo e mostro uma análise por rota.
         </p>
 
         <label htmlFor="pos">Onde você está agora</label>
@@ -288,11 +254,7 @@ export default function CargasPage() {
         {erro && <div className="error">{erro}</div>}
         <div className="actions">
           <button onClick={analisar} disabled={lendo || mensagensPreenchidas.length === 0}>
-            {lendo
-              ? mensagensPreenchidas.length > 1
-                ? `Lendo ${mensagensPreenchidas.length} mensagens...`
-                : "Lendo a mensagem..."
-              : "Analisar cargas"}
+            {lendo ? "Separando e analisando as cargas..." : "Analisar cargas"}
           </button>
         </div>
       </div>
