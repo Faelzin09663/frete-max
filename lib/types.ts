@@ -76,6 +76,32 @@ export type CalcResult = {
   avisos: string[];
 };
 
+/** Retrato financeiro salvo quando o motorista escolhe/realiza uma carga. */
+export type ViagemStatus = "ESCOLHIDA" | "CONCLUIDA";
+
+export type Viagem = {
+  id: string;
+  realizadaEm: string; // ISO local da data/hora do registro
+  status: ViagemStatus;
+  origem: string;
+  destino: string;
+  receitaRS: number;
+  dieselRS: number;
+  manutencaoRS: number;
+  pedagioRS: number;
+  custoTotalRS: number;
+  lucroRS: number;
+  lucroPorHoraRS: number;
+  horas: number;
+  kmTotal: number;
+  toneladas: number;
+  // Valores reais preenchidos ao concluir
+  receitaRealRS?: number | null;
+  dieselRealRS?: number | null;
+  pedagioRealRS?: number | null;
+  lucroRealRS?: number | null;
+};
+
 export type Ponto = [number, number]; // [lat, lng]
 
 export type MapaDados = {

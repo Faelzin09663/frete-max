@@ -84,6 +84,19 @@ oferta para cada rota/fluxo distinto, separando origem, destino, preço, pedági
 observações de cada bloco. Assim, mensagens como duas ofertas diferentes coladas em sequência são
 comparadas juntas sem precisar criar novos campos.
 
+## Painel de viagens e caixa
+
+Depois de analisar as cargas, a tela ordena por padrão pelo **lucro por hora**. Esse indicador já
+desconta diesel, manutenção, pedágio e considera o tempo de direção, carregamento, descarga e
+retorno configurado. Assim, uma carga que deixa R$ 1.500 em menos tempo pode aparecer como melhor
+escolha do que outra que deixa R$ 1.900, se o retorno por hora for maior.
+
+O botão **Escolher e registrar esta carga** salva o retrato financeiro da viagem no aparelho e abre
+o **Painel**. O painel mostra lucro semanal, receita bruta, saída do caixa, manutenção reservada,
+diesel, pedágio, lucro diário em gráfico e a lista detalhada das viagens registradas. A manutenção
+é calculada pelo valor de R$/km configurado em Caminhão e fica separada como valor a reservar para
+óleo, pneus, peças e desgaste. Os registros ficam no localStorage deste aparelho nesta fase.
+
 ## Fase 3 (parcial): conta e sincronização + PWA com "Compartilhar" (Android)
 
 **Conta (opcional).** Tela `/conta`: login por link mágico (e-mail), sem senha. Sem entrar,
@@ -131,3 +144,18 @@ testar na prática, principalmente:
 
 Viagens concluídas, dashboard semanal, exportação para planilha, leitura de tíquete de descarga,
 histórico de preço por rota, sugestão de retorno por região.
+
+## Problemas comuns
+
+**`Module not found: Can't resolve '@supabase/supabase-js'`**
+A dependência já está no `package.json`, mas a pasta `node_modules` ficou desatualizada
+(instalada antes de o Supabase entrar no projeto). Reinstale limpo:
+
+```bash
+rm -rf node_modules .next
+npm install
+npm run dev
+```
+
+No Windows (PowerShell): `Remove-Item -Recurse -Force node_modules, .next; npm install`.
+Na Vercel, use **Redeploy → sem cache** (Clear Build Cache).

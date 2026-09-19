@@ -33,12 +33,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!disponivel) return;
     const supabase = createClient();
     let ativo = true;
-    supabase.auth.getUser().then(({ data }) => {
+    supabase.auth.getUser().then(({ data }: { data: { user: User | null } }) => {
       if (!ativo) return;
       setUser(data.user);
       setCarregando(false);
     });
-    const { data: assinatura } = supabase.auth.onAuthStateChange((_evento, sessao) => {
+    const { data: assinatura } = supabase.auth.onAuthStateChange((_evento: string, sessao: any) => {
       setUser(sessao?.user ?? null);
     });
     return () => {

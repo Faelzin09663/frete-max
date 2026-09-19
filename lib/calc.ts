@@ -76,6 +76,29 @@ export function calcular(i: CalcInput): CalcResult {
   const estimado = vazio.estimado || cheio.estimado || !!retorno?.estimado;
   if (estimado) avisos.push("Distâncias estimadas (sem Google Maps).");
 
+  // ---------- alertas de bom senso ----------
+  if (truck.consumoCheioKmL <= 0 || truck.consumoVazioKmL <= 0) {
+    avisos.push("⚠️ Consumo zerado no caminhão. Confira em Caminhão > Consumo.");
+  }
+  if (toneladas > truck.capacidadeT * 1.05) {
+    avisos.push(`⚠️ Carga de ${toneladas}t acima da capacidade do caminhão (${truck.capacidadeT}t).`);
+  }
+  if (valor != null && unidade === "TONELADA" && kmCheio > 200 && valor < 50) {
+    avisos.push("⚠️ Frete muito baixo para essa distância. Confira o valor.");
+  }
+  if (valor != null && unidade === "TONELADA" && valor > 500) {
+    avisos.push("⚠️ Frete acima de R$500/t — verifique se o valor está certo.");
+  }
+  if (kmTotal > 3000) {
+    avisos.push("⚠️ Mais de 3.000 km no total. Confira os locais de origem e destino.");
+  }
+  if (horas > 48) {
+    avisos.push("⚠️ Viagem de mais de 48h. Verifique se a rota está correta.");
+  }
+  if (valor != null && lucroRS < -500) {
+    avisos.push("⚠️ Prejuízo forte (mais de R$500). Vale conferir os números.");
+  }
+
   return {
     receitaRS,
     dieselRS,

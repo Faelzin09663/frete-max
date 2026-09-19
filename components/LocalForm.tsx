@@ -1,5 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useId, useState } from "react";
+import { Field } from "@/components/ui";
+import { Note } from "@/components/ui";
+import { Icon } from "@/components/Icons";
 import { geocodificar } from "@/lib/client-api.ts";
 import { novoId } from "@/lib/storage.ts";
 import type { Local } from "@/lib/types.ts";
@@ -15,6 +18,7 @@ export function LocalForm({
   onSalvar: (l: Local) => void;
   rotulo?: string;
 }) {
+  const uid = useId();
   const [apelido, setApelido] = useState(apelidoInicial);
   const [sinonimos, setSinonimos] = useState(sinonimoInicial);
   const [endereco, setEndereco] = useState("");
@@ -50,20 +54,19 @@ export function LocalForm({
 
   return (
     <div>
-      <label>Apelido (como aparece nas mensagens)</label>
-      <input value={apelido} onChange={(e) => setApelido(e.target.value)} placeholder="Ex.: Extrativa" />
-      <label>Endereço ou coordenadas</label>
-      <input
-        value={endereco}
-        onChange={(e) => setEndereco(e.target.value)}
-        placeholder="Rua, cidade  —  ou  -19.9245, -43.9352"
-      />
-      <div className="hint">Dica: no Google Maps, segure o dedo no ponto e copie os números que aparecem.</div>
-      <label>Outros nomes (separe por vírgula)</label>
-      <input value={sinonimos} onChange={(e) => setSinonimos(e.target.value)} placeholder="Ex.: Mina Extrativa, Extrativa Mineral" />
-      {erro && <div className="error">{erro}</div>}
-      <div className="actions">
-        <button onClick={salvar} disabled={busy}>
+      <Field label="Apelido (como aparece nas mensagens)" htmlFor={`${uid}-ap`}>
+        <input id={`${uid}-ap`} value={apelido} onChange={(e) => setApelido(e.target.value)} placeholder="Ex.: Extrativa" autoCapitalize="words" />
+      </Field>
+      <Field label="Endereço ou coordenadas" htmlFor={`${uid}-end`} hint="Dica: no Google Maps, segure o dedo no ponto e copie os números que aparecem.">
+        <input id={`${uid}-end`} value={endereco} onChange={(e) => setEndereco(e.target.value)} placeholder="Rua, cidade  —  ou  -19.9245, -43.9352" />
+      </Field>
+      <Field label="Outros nomes (separe por vírgula)" htmlFor={`${uid}-sin`}>
+        <input id={`${uid}-sin`} value={sinonimos} onChange={(e) => setSinonimos(e.target.value)} placeholder="Ex.: Mina Extrativa, Extrativa Mineral" />
+      </Field>
+      {erro && <Note tone="loss">{erro}</Note>}
+      <div style={{ marginTop: 16 }}>
+        <button type="button" className="btn block" onClick={salvar} disabled={busy}>
+          {busy ? <span className="spinner" aria-hidden="true" /> : <Icon name="pin" size={20} />}
           {busy ? "Buscando endereço..." : rotulo}
         </button>
       </div>

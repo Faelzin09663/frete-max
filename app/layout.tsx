@@ -3,8 +3,10 @@ import { Barlow, Barlow_Condensed } from "next/font/google";
 import "leaflet/dist/leaflet.css";
 import "./globals.css";
 import { Nav } from "@/components/Nav";
+import { Topbar } from "@/components/Topbar";
 import { PwaRegister } from "@/components/PwaRegister";
-import { AuthProvider } from "@/lib/auth.tsx";
+import { OfflineBanner } from "@/components/OfflineBanner";
+import { AuthProvider } from "@/lib/auth";
 
 const body = Barlow({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--f-body" });
 const num = Barlow_Condensed({ subsets: ["latin"], weight: ["500", "600", "700"], variable: "--f-num" });
@@ -19,13 +21,24 @@ export const metadata: Metadata = {
   },
   appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "FreteMax" },
 };
-export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#16211d" };
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f3f1ea" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b100f" },
+  ],
+};
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR" className={`${body.variable} ${num.variable}`}>
       <body>
         <AuthProvider>
+          <OfflineBanner />
+          <Topbar />
           <main className="wrap">{children}</main>
           <Nav />
         </AuthProvider>
@@ -34,3 +47,4 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   );
 }
+

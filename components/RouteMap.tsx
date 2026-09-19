@@ -2,7 +2,7 @@
 import { useEffect, useRef } from "react";
 import type { MapaDados } from "@/lib/types.ts";
 
-const COR = { POSICAO: "#ffffff", ORIGEM: "#f2b705", DESTINO: "#0b7a4b", BASE: "#8a96a0" } as const;
+const COR = { POSICAO: "#ffffff", ORIGEM: "#ffb800", DESTINO: "#0a9b5e", BASE: "#8a96a0" } as const;
 
 export function RouteMap({ dados }: { dados: MapaDados }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -26,7 +26,7 @@ export function RouteMap({ dados }: { dados: MapaDados }) {
       for (const s of dados.segmentos) {
         todos.push(...s.pontos);
         L.polyline(s.pontos, {
-          color: s.tipo === "CHEIO" ? "#16211d" : "#5b6862",
+          color: s.tipo === "CHEIO" ? "#111716" : "#5d6966",
           weight: s.tipo === "CHEIO" ? 6 : 4,
           dashArray: s.tipo === "CHEIO" ? undefined : "2 10",
           lineCap: "round",
@@ -35,7 +35,7 @@ export function RouteMap({ dados }: { dados: MapaDados }) {
       for (const m of dados.marcadores) {
         L.circleMarker([m.lat, m.lng], {
           radius: 9,
-          color: "#16211d",
+          color: "#111716",
           weight: 3,
           fillColor: COR[m.papel],
           fillOpacity: 1,
@@ -56,15 +56,21 @@ export function RouteMap({ dados }: { dados: MapaDados }) {
   return (
     <>
       <div ref={ref} className="map" role="img" aria-label="Mapa da rota" />
-      <div className="kmlab" style={{ marginTop: 6 }}>
-        <span>Tracejado: vazio</span>
-        <span>Linha grossa: cheio</span>
+      <div className="roadlab" style={{ marginTop: 8 }}>
+        <span>
+          <i className="v" />
+          Tracejado: vazio
+        </span>
+        <span>
+          <i />
+          Linha grossa: cheio
+        </span>
       </div>
-      <p style={{ margin: "10px 0 0" }}>
-        <a className="btn linkbtn" href={dados.linkGoogle} target="_blank" rel="noreferrer">
+      <div className="maplink">
+        <a className="btn ghost block" href={dados.linkGoogle} target="_blank" rel="noreferrer">
           Abrir no Google Maps
         </a>
-      </p>
+      </div>
     </>
   );
 }

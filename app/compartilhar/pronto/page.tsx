@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Icon } from "@/components/Icons";
 import { definirCompartilhado } from "@/lib/compartilhado.ts";
 
 const CACHE = "fretemax-compartilhado-v1";
@@ -40,10 +41,14 @@ export default function CompartilharProntoPage() {
   }, [router]);
 
   return (
-    <p className="lead">
-      {erro
-        ? "Não consegui abrir o que foi compartilhado. Volte ao WhatsApp e cole a mensagem manualmente."
-        : "Abrindo a carga compartilhada..."}
-    </p>
+    <div className="empty" role="status" style={{ marginTop: 24 }}>
+      <div className="ic">{erro ? <Icon name="alert" size={24} /> : <span className="spinner" aria-hidden="true" />}</div>
+      <strong>{erro ? "Não abriu" : "Abrindo a carga"}</strong>
+      <p>
+        {erro
+          ? "Não consegui abrir o que foi compartilhado. Volte ao WhatsApp e cole a mensagem manualmente."
+          : "Trazendo o que você compartilhou do WhatsApp..."}
+      </p>
+    </div>
   );
 }

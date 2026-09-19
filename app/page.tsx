@@ -1,35 +1,73 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Icon } from "@/components/Icons";
 import { LocalForm } from "@/components/LocalForm";
 import { consumirCompartilhado } from "@/lib/compartilhado.ts";
 import { NumInput } from "@/components/NumInput";
 import { OfferCard, type Selo } from "@/components/OfferCard";
+import { ReviewScreen } from "@/components/ReviewScreen";
+import { ComparePanel } from "@/components/ComparePanel";
+import { Note, PageHead, Segmented } from "@/components/ui";
 import { calcular, parseHora, valorEfetivo } from "@/lib/calc.ts";
 import { extrairOfertas, getLeg } from "@/lib/client-api.ts";
 import { acharLocal, normalizar } from "@/lib/match.ts";
 import { montarMapa } from "@/lib/mapa.ts";
 import { fmtNum } from "@/lib/format.ts";
-import { useLocais, useTruck, novoId } from "@/lib/storage.ts";
-import type { CalcResult, Leg, Local, MapaDados, Oferta } from "@/lib/types.ts";
+import { useLocais, useTruck, useViagens, novoId } from "@/lib/storage.ts";
+import type { CalcResult, Leg, Local, MapaDados, Oferta, Viagem } from "@/lib/types.ts";
 
 type Mensagem = { id: string; texto: string; imagens: File[] };
 type Linha = { oferta: Oferta; origem: Local | null; destino: Local | null; calc: CalcResult | null; mapa?: MapaDados };
 
+type Fase = "INPUT" | "REVISAO" | "RESULTADO";
+
 const ZERO: Leg = { km: 0, min: 0, tollRS: 0, estimado: false };
-const mensagemVazia = (): Mensagem => ({ id: novoId(), texto: "", imagens: [] });
+const mensagemVazia = (id = "principal"): Mensagem => ({ id, texto: "", imagens: [] });
 
 function horaAgora(): string {
   const d = new Date();
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
+/** Miniaturas dos prints anexados, com botão para remover cada um. */
+function Miniaturas({ arquivos, onRemover }: { arquivos: File[]; onRemover: (i: number) => void }) {
+  const [urls, setUrls] = useState<string[]>([]);
+  useEffect(() => {
+    const novas = arquivos.map((f) => URL.createObjectURL(f));
+    setUrls(novas);
+    return () => novas.forEach((u) => URL.revokeObjectURL(u));
+  }, [arquivos]);
+  if (arquivos.length === 0) return null;
+  return (
+    <div className="thumbs" aria-label="Prints anexados">
+      {urls.map((u, i) => (
+        <div className="thumb" key={u}>
+          <img src={u} alt={`Print ${i + 1}`} />
+          <button type="button" onClick={() => onRemover(i)} aria-label={`Remover print ${i + 1}`}>
+            <Icon name="x" size={14} />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function CargasPage() {
+  return (
+    <Suspense fallback={<div className="skel" />}>
+      <CargasConteudo />
+    </Suspense>
+  );
+}
+
+function CargasConteudo() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [truck, , truckPronto] = useTruck();
   const [locais, setLocais, locaisPronto] = useLocais();
+  const [, setViagens] = useViagens();
 
   const [mensagens, setMensagens] = useState<Mensagem[]>([mensagemVazia()]);
   const [posicaoId, setPosicaoId] = useState("");
@@ -38,7 +76,9 @@ export default function CargasPage() {
   const [comRetorno, setComRetorno] = useState(false);
   const [ordem, setOrdem] = useState<"LUCRO" | "HORA">("HORA");
 
-  const [ofertas, setOfertas] = useState<Oferta[]>([]);
+  const [fase, setFase] = useState<Fase>("INPUT");
+  const [ofertasBrutas, setOfertasBrutas] = useState<Oferta[]>([]); // raw from AI
+  const [ofertas, setOfertas] = useState<Oferta[]>([]); // confirmed after review
   const [linhas, setLinhas] = useState<Linha[]>([]);
   const [lendo, setLendo] = useState(false);
   const [calculando, setCalculando] = useState(false);
@@ -48,6 +88,18 @@ export default function CargasPage() {
 
   function atualizarMensagem(patch: Partial<Mensagem>) {
     setMensagens((prev) => [{ ...prev[0], ...patch }]);
+  }
+  async function colar() {
+    try {
+      const texto = await navigator.clipboard.readText();
+      if (texto.trim()) atualizarMensagem({ texto: mensagens[0].texto ? `${mensagens[0].texto}\n\n${texto}` : texto });
+    } catch {
+      setErro("O navegador não deixou acessar a área de transferência. Toque no campo e cole manualmente.");
+    }
+  }
+  function anexar(files: FileList | null) {
+    const novas = Array.from(files ?? []);
+    if (novas.length) atualizarMensagem({ imagens: [...mensagens[0].imagens, ...novas] });
   }
   // usado pelo handoff do "Compartilhar": preenche o campo único
   function definirMensagemUnica(texto: string, imagens: File[]) {
@@ -100,7 +152,10 @@ export default function CargasPage() {
       } else if (novas.length === 0) {
         setErro("Não encontrei nenhuma carga nessas mensagens.");
       }
-      setOfertas(novas);
+      if (novas.length > 0) {
+        setOfertasBrutas(novas);
+        setFase("REVISAO");
+      }
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao ler as mensagens.");
     } finally {
@@ -108,9 +163,21 @@ export default function CargasPage() {
     }
   }
 
+  function confirmarRevisao(corrigidas: Oferta[]) {
+    setOfertas(corrigidas);
+    setFase("RESULTADO");
+  }
+
+  function voltarParaInput() {
+    setFase("INPUT");
+    setOfertasBrutas([]);
+    setOfertas([]);
+    setLinhas([]);
+  }
+
   // Recalcula tudo sempre que ofertas, locais ou configurações mudam. Rotas ficam em cache.
   useEffect(() => {
-    if (!truckPronto || !locaisPronto) return;
+    if (!truckPronto || !locaisPronto || fase !== "RESULTADO") return;
     let cancelado = false;
     (async () => {
       setCalculando(true);
@@ -151,10 +218,32 @@ export default function CargasPage() {
       cancelado = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ofertas, locais, truck, posicaoId, agora, ton, base?.id, truckPronto, locaisPronto]);
+  }, [ofertas, locais, truck, posicaoId, agora, ton, base?.id, truckPronto, locaisPronto, fase]);
 
   function editar(id: string, patch: Partial<Oferta>) {
     setOfertas((prev) => prev.map((o) => (o.id === id ? { ...o, ...patch } : o)));
+  }
+
+  function escolherCarga(linha: Linha & { calc: CalcResult }) {
+    const viagem: Viagem = {
+      id: novoId(),
+      realizadaEm: new Date().toISOString(),
+      status: "ESCOLHIDA",
+      origem: linha.origem?.apelido ?? linha.oferta.origemTexto,
+      destino: linha.destino?.apelido ?? linha.oferta.destinoTexto,
+      receitaRS: linha.calc.receitaRS,
+      dieselRS: linha.calc.dieselRS,
+      manutencaoRS: linha.calc.manutencaoRS,
+      pedagioRS: linha.calc.pedagioRS,
+      custoTotalRS: linha.calc.custoTotalRS,
+      lucroRS: linha.calc.lucroRS,
+      lucroPorHoraRS: linha.calc.lucroPorHoraRS,
+      horas: linha.calc.horas,
+      kmTotal: linha.calc.kmTotal,
+      toneladas: ton,
+    };
+    setViagens((prev) => [viagem, ...prev]);
+    router.push("/viagens");
   }
 
   // Locais que a IA citou e ainda não estão cadastrados (sem repetir)
@@ -191,103 +280,191 @@ export default function CargasPage() {
 
   const semLocais = locaisPronto && locais.length === 0;
 
+  const temResultado = calculadas.ok.length > 0 || calculadas.semValor.length > 0;
+  const m0 = mensagens[0];
+
+  // Compare panel data
+  const compareLinhas = useMemo(() => {
+    return calculadas.ok
+      .filter((l) => l.calc.viabilidade !== "INVIAVEL" && l.origem && l.destino)
+      .map((l) => ({
+        oferta: l.oferta,
+        origemNome: l.origem!.apelido,
+        destinoNome: l.destino!.apelido,
+        calc: l.calc,
+      }));
+  }, [calculadas.ok]);
+
+  // ---- PHASE: REVIEW ----
+  if (fase === "REVISAO") {
+    return (
+      <ReviewScreen
+        ofertas={ofertasBrutas}
+        onConfirmar={confirmarRevisao}
+        onVoltar={voltarParaInput}
+      />
+    );
+  }
+
   return (
     <>
-      <h1>Qual carga vale mais?</h1>
-      <p className="lead">Cole uma ou várias ofertas na mesma mensagem, ou envie os prints. Eu separo cada carga, calculo o lucro e comparo qual rota vale mais.</p>
+      <PageHead
+        eyebrow="Cargas"
+        title="Qual carga vale mais?"
+        lead="Cole as ofertas do WhatsApp ou anexe os prints. Eu separo cada carga, calculo o lucro e mostro qual rota compensa."
+      />
 
-      {semLocais && (
-        <div className="note">
-          Comece cadastrando seus locais. <Link href="/locais">Ir para Locais</Link>
-        </div>
+      {fase === "INPUT" && !lendo && (
+        <ol className="steps" aria-label="Como funciona">
+          <li>
+            <b>1</b>Cole ou anexe as ofertas
+          </li>
+          <li>
+            <b>2</b>Confira o que a IA entendeu
+          </li>
+          <li>
+            <b>3</b>Compare o lucro por hora
+          </li>
+        </ol>
       )}
 
-      <div className="panel">
-        <label htmlFor={`msg-${mensagens[0].id}`}>Mensagem com uma ou várias cargas</label>
+      {semLocais && (
+        <Note tone="warn" icon="pin">
+          Comece cadastrando seus locais. <Link href="/locais">Ir para Locais</Link>
+        </Note>
+      )}
+
+      <section className="card">
+        <label className="lbl" htmlFor={`msg-${m0.id}`}>
+          Mensagem com uma ou várias cargas
+        </label>
         <textarea
-          id={`msg-${mensagens[0].id}`}
-          value={mensagens[0].texto}
+          id={`msg-${m0.id}`}
+          value={m0.texto}
           onChange={(e) => atualizarMensagem({ texto: e.target.value })}
-          placeholder="Cole aqui todas as mensagens/ofertas do WhatsApp. A IA vai separar cada origem e destino automaticamente."
+          placeholder="Cole aqui as ofertas do WhatsApp. Pode ser mais de uma, seguidas — eu separo origem, destino e preço de cada uma."
         />
-        <label htmlFor={`img-${mensagens[0].id}`}>Ou envie os prints da conversa</label>
-        <input
-          id={`img-${mensagens[0].id}`}
-          type="file"
-          accept="image/*"
-          multiple
-          onChange={(e) => atualizarMensagem({ imagens: Array.from(e.target.files ?? []) })}
-        />
-        {mensagens[0].imagens.length > 0 && <div className="hint">{mensagens[0].imagens.length} imagem(ns) selecionada(s)</div>}
-        <p className="hint">
-          Pode colar várias divulgações seguidas, mesmo que cada uma tenha origem, destino e preço diferentes. Eu separo tudo e mostro uma análise por rota.
-        </p>
+        <div className="tools">
+          <button type="button" className="btn ghost sm" onClick={colar}>
+            <Icon name="paste" size={18} />
+            Colar
+          </button>
+          <label className="btn ghost sm pick">
+            <Icon name="image" size={18} />
+            Anexar print
+            <input type="file" className="sr-only" accept="image/*" multiple onChange={(e) => { anexar(e.target.files); e.target.value = ""; }} />
+          </label>
+          {(m0.texto || m0.imagens.length > 0) && (
+            <button type="button" className="btn ghost sm" onClick={() => { atualizarMensagem({ texto: "", imagens: [] }); voltarParaInput(); }}>
+              Limpar
+            </button>
+          )}
+        </div>
+        <Miniaturas arquivos={m0.imagens} onRemover={(i) => atualizarMensagem({ imagens: m0.imagens.filter((_, k) => k !== i) })} />
 
-        <label htmlFor="pos">Onde você está agora</label>
-        <select id="pos" value={posicaoId} onChange={(e) => setPosicaoId(e.target.value)}>
-          <option value="">Já estou na origem (sem km vazio)</option>
-          {locais.map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.apelido}
-            </option>
-          ))}
-        </select>
+        <hr className="sep" />
 
-        <div className="row2">
-          <div>
+        <div className="field">
+          <label htmlFor="pos">Onde você está agora</label>
+          <select id="pos" value={posicaoId} onChange={(e) => setPosicaoId(e.target.value)}>
+            <option value="">Já estou na origem (sem km vazio)</option>
+            {locais.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.apelido}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="grid2">
+          <div className="field">
             <label htmlFor="hora">Hora agora</label>
             <input id="hora" type="time" value={agora} onChange={(e) => setAgora(e.target.value)} />
           </div>
-          <div>
-            <label htmlFor="ton">Toneladas</label>
-            <NumInput id="ton" value={ton} onChange={setToneladas} />
+          <div className="field">
+            <label htmlFor="ton">Carga</label>
+            <div className="inp has-unit">
+              <NumInput id="ton" value={ton} onChange={setToneladas} />
+              <span className="unit">t</span>
+            </div>
           </div>
         </div>
 
         {truck.baseLocalId && (
-          <label className="check">
-            <input type="checkbox" checked={comRetorno} onChange={(e) => setComRetorno(e.target.checked)} />
-            Contar a volta vazia até a base
+          <label className="switch">
+            <span>
+              Contar a volta até a base
+              <small>Soma o km vazio do retorno</small>
+            </span>
+            <input className="sw" type="checkbox" checked={comRetorno} onChange={(e) => setComRetorno(e.target.checked)} />
           </label>
         )}
 
-        {erro && <div className="error">{erro}</div>}
-        <div className="actions">
-          <button onClick={analisar} disabled={lendo || mensagensPreenchidas.length === 0}>
-            {lendo ? "Separando e analisando as cargas..." : "Analisar cargas"}
+        {erro && (
+          <Note tone="loss" icon="alert">
+            {erro}
+          </Note>
+        )}
+
+        <div className="sticky-cta">
+          <button type="button" className="btn block" onClick={analisar} disabled={lendo || mensagensPreenchidas.length === 0}>
+            {lendo ? <span className="spinner" aria-hidden="true" /> : <Icon name="bolt" size={22} />}
+            {lendo ? "Analisando as cargas..." : "Analisar cargas"}
           </button>
         </div>
-      </div>
+      </section>
 
       {faltando.length > 0 && (
         <>
           <h2>Locais novos</h2>
-          <p className="lead">Preciso do endereço de {faltando.length === 1 ? "um local" : "alguns locais"} para calcular. É só uma vez.</p>
+          <p className="lead" style={{ marginBottom: 12 }}>
+            Preciso do endereço de {faltando.length === 1 ? "um local" : "alguns locais"} para calcular. É só uma vez.
+          </p>
           {faltando.map((nome) => (
-            <div className="panel attn" key={nome}>
-              <LocalForm
-                apelidoInicial={nome}
-                onSalvar={(l) => setLocais((prev) => [...prev, l])}
-                rotulo={`Salvar ${nome}`}
-              />
+            <div className="card attn" key={nome}>
+              <LocalForm apelidoInicial={nome} onSalvar={(l) => setLocais((prev) => [...prev, l])} rotulo={`Salvar ${nome}`} />
             </div>
           ))}
         </>
       )}
 
-      {calculando && <div className="spin">Calculando rotas...</div>}
+      {calculando && ofertas.length > 0 && (
+        <>
+          <div className="calc-status">
+            <span className="spinner" aria-hidden="true" />
+            Calculando rotas...
+          </div>
+          {calculadas.ok.length === 0 && <div className="skel" />}
+        </>
+      )}
+
+      {/* Comparison Panel - shows when 2+ viable loads */}
+      {compareLinhas.length >= 2 && <ComparePanel linhas={compareLinhas} />}
 
       {calculadas.ok.length > 0 && (
         <>
-          <h2>Resultado</h2>
-          <div className="row2" style={{ marginBottom: 12 }}>
-            <button className={ordem === "HORA" ? "" : "sec"} onClick={() => setOrdem("HORA")}>
-              Por hora
-            </button>
-            <button className={ordem === "LUCRO" ? "" : "sec"} onClick={() => setOrdem("LUCRO")}>
-              Por lucro
-            </button>
+          <div className="results-head">
+            <div>
+              <h2>Resultado</h2>
+              <p className="hint">
+                {calculadas.ok.length} {calculadas.ok.length === 1 ? "carga" : "cargas"} · {fmtNum(ton)} t
+              </p>
+            </div>
+            <Segmented
+              label="Ordenar por"
+              value={ordem}
+              onChange={setOrdem}
+              options={[
+                { value: "HORA", label: "Por hora" },
+                { value: "LUCRO", label: "Por lucro" },
+              ]}
+            />
           </div>
+          {calculadas.melhorHora && (
+            <Note tone="gain" icon="bolt">
+              <strong>Dica:</strong> o melhor retorno por hora considera lucro, diesel, pedágio, manutenção e o tempo da viagem, não só o maior frete.
+            </Note>
+          )}
           {calculadas.ok.map((l) => (
             <OfferCard
               key={l.oferta.id}
@@ -298,6 +475,7 @@ export default function CargasPage() {
               mapa={l.mapa ?? null}
               selos={seloDe(l.oferta.id)}
               onEditar={(p) => editar(l.oferta.id, p)}
+              onEscolher={() => escolherCarga(l)}
             />
           ))}
         </>
@@ -306,7 +484,9 @@ export default function CargasPage() {
       {calculadas.semValor.length > 0 && (
         <>
           <h2>Sem preço na mensagem</h2>
-          <p className="lead">Digite o frete para ver o lucro. Toneladas: {fmtNum(ton)}.</p>
+          <p className="lead" style={{ marginBottom: 12 }}>
+            Digite o frete para ver o lucro. Carga considerada: {fmtNum(ton)} t.
+          </p>
           {calculadas.semValor.map((l) => (
             <OfferCard
               key={l.oferta.id}

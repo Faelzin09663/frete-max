@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "./auth.tsx";
 import { createClient } from "./supabase/client.ts";
-import type { Local, Truck } from "./types.ts";
+import type { Local, Truck, Viagem } from "./types.ts";
 
 export const TRUCK_PADRAO: Truck = {
   nome: "Meu caminhão",
@@ -58,6 +58,11 @@ export function useLocalStorage<T>(key: string, inicial: T) {
 
 export function novoId(): string {
   return Math.random().toString(36).slice(2, 10);
+}
+
+/** Viagens concluídas/escolhidas: ficam no aparelho para o painel semanal. */
+export function useViagens() {
+  return useLocalStorage<Viagem[]>("fretemax:viagens", []);
 }
 
 // ---------------------------------------------------------------------------

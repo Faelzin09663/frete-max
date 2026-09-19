@@ -80,5 +80,15 @@ eq("mapa: link com waypoint", m.linkGoogle.includes("waypoints=-19.5%2C-44"), tr
 const m2 = montarMapa(null, L("o", -19.5, -44.0), L("d", -19.4, -44.2), null, leg(0, 0), leg(20, 20), null);
 eq("mapa sem posição: só cheio", m2.segmentos.map((s) => s.tipo), ["CHEIO"]);
 
+// Testes de alertas de bom senso
+const alertaSobrepeso = calcular({ oferta: base, truck, toneladas: 35, vazio: leg(0, 0), cheio: leg(10, 10), ...semData });
+eq("alerta sobrepeso", alertaSobrepeso.avisos.some((a) => a.includes("acima da capacidade")), true);
+
+const alertaConsumoZerado = calcular({ oferta: base, truck: { ...truck, consumoCheioKmL: 0 }, toneladas: 30, vazio: leg(0, 0), cheio: leg(10, 10), ...semData });
+eq("alerta consumo zerado", alertaConsumoZerado.avisos.some((a) => a.includes("Consumo zerado")), true);
+
+const alertaFreteBaixo = calcular({ oferta: { ...base, valor: 30 }, truck, toneladas: 30, vazio: leg(0, 0), cheio: leg(250, 200), ...semData });
+eq("alerta frete baixo para longa distância", alertaFreteBaixo.avisos.some((a) => a.includes("muito baixo")), true);
+
 console.log(falhas === 0 ? "\nTodos os testes passaram." : `\n${falhas} falha(s).`);
 process.exit(falhas ? 1 : 0);
