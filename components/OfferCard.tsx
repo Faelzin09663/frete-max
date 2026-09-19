@@ -45,6 +45,7 @@ export function OfferCard({
       </div>
 
       <div className="chips">
+        {oferta.origemMsg && <span className="chip">{oferta.origemMsg}</span>}
         {selos.includes("LUCRO") && <span className="chip gain">Maior lucro</span>}
         {selos.includes("HORA") && <span className="chip gain">Melhor por hora</span>}
         {viab && (

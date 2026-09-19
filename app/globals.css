@@ -61,6 +61,9 @@ button.small { min-height: 40px; width: auto; padding: 6px 14px; font-size: 15px
 button.danger { border-color: var(--loss); color: var(--loss); background: transparent; }
 button:disabled { opacity: 0.55; cursor: progress; }
 .actions { display: flex; gap: 10px; margin-top: 16px; }
+.msg-bloco { margin-top: 20px; padding-top: 16px; border-top: 2px dashed var(--line); }
+.msg-head { display: flex; align-items: center; justify-content: space-between; }
+.msg-head strong { font-family: var(--font-num); font-size: 17px; }
 
 .panel { background: var(--card); border: 2px solid var(--line); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 12px; }
 .panel.attn { border-color: var(--sign); }

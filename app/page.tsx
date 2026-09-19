@@ -11,12 +11,14 @@ import { extrairOfertas, getLeg } from "@/lib/client-api.ts";
 import { acharLocal, normalizar } from "@/lib/match.ts";
 import { montarMapa } from "@/lib/mapa.ts";
 import { fmtNum } from "@/lib/format.ts";
-import { useLocais, useTruck } from "@/lib/storage.ts";
+import { useLocais, useTruck, novoId } from "@/lib/storage.ts";
 import type { CalcResult, Leg, Local, MapaDados, Oferta } from "@/lib/types.ts";
 
+type Mensagem = { id: string; texto: string; imagens: File[] };
 type Linha = { oferta: Oferta; origem: Local | null; destino: Local | null; calc: CalcResult | null; mapa?: MapaDados };
 
 const ZERO: Leg = { km: 0, min: 0, tollRS: 0, estimado: false };
+const mensagemVazia = (): Mensagem => ({ id: novoId(), texto: "", imagens: [] });
 
 function horaAgora(): string {
   const d = new Date();
@@ -29,8 +31,7 @@ export default function CargasPage() {
   const [truck, , truckPronto] = useTruck();
   const [locais, setLocais, locaisPronto] = useLocais();
 
-  const [texto, setTexto] = useState("");
-  const [imagens, setImagens] = useState<File[]>([]);
+  const [mensagens, setMensagens] = useState<Mensagem[]>([mensagemVazia()]);
   const [posicaoId, setPosicaoId] = useState("");
   const [agora, setAgora] = useState("");
   const [toneladas, setToneladas] = useState<number | null>(null);
@@ -45,17 +46,35 @@ export default function CargasPage() {
 
   useEffect(() => setAgora(horaAgora()), []);
 
+  function atualizarMensagem(id: string, patch: Partial<Mensagem>) {
+    setMensagens((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+  }
+  function adicionarMensagem() {
+    setMensagens((prev) => [...prev, mensagemVazia()]);
+  }
+  function removerMensagem(id: string) {
+    setMensagens((prev) => (prev.length > 1 ? prev.filter((m) => m.id !== id) : prev));
+  }
+  // usado pelo handoff do "Compartilhar": preenche o primeiro bloco vazio, ou cria um novo
+  function definirMensagemUnica(texto: string, imagens: File[]) {
+    setMensagens((prev) => {
+      if (prev.length === 1 && !prev[0].texto.trim() && prev[0].imagens.length === 0) {
+        return [{ ...prev[0], texto, imagens }];
+      }
+      return [...prev, { id: novoId(), texto, imagens }];
+    });
+  }
+
   // conteúdo recebido pelo "Compartilhar" do WhatsApp (veja app/compartilhar)
   useEffect(() => {
     if (searchParams.get("compartilhado") === "1") {
       const dados = consumirCompartilhado();
-      if (dados) {
-        if (dados.texto) setTexto(dados.texto);
-        if (dados.imagens.length > 0) setImagens(dados.imagens);
+      if (dados && (dados.texto || dados.imagens.length > 0)) {
+        definirMensagemUnica(dados.texto, dados.imagens);
       }
       router.replace("/");
     } else if (searchParams.get("texto")) {
-      setTexto(searchParams.get("texto") ?? "");
+      definirMensagemUnica(searchParams.get("texto") ?? "", []);
       if (searchParams.get("semSw") === "1") {
         setErro("Recebi o texto, mas não a imagem. Se era um print, envie de novo por aqui.");
       }
@@ -67,15 +86,38 @@ export default function CargasPage() {
   const ton = toneladas ?? truck.capacidadeT;
   const base = comRetorno ? locais.find((l) => l.id === truck.baseLocalId) ?? null : null;
 
+  const mensagensPreenchidas = mensagens.filter((m) => m.texto.trim() || m.imagens.length > 0);
+
   async function analisar() {
     setErro(null);
     setLendo(true);
     try {
-      const novas = await extrairOfertas(texto, imagens);
-      if (novas.length === 0) setErro("Não encontrei nenhuma carga nessa mensagem.");
+      const rotular = mensagensPreenchidas.length > 1;
+      const resultados = await Promise.allSettled(
+        mensagensPreenchidas.map((m) => extrairOfertas(m.texto, m.imagens)),
+      );
+      const novas: Oferta[] = [];
+      let falhas = 0;
+      resultados.forEach((r, i) => {
+        if (r.status === "fulfilled") {
+          const rotulo = rotular ? `Mensagem ${i + 1}` : undefined;
+          novas.push(...r.value.map((o) => (rotulo ? { ...o, origemMsg: rotulo } : o)));
+        } else {
+          falhas++;
+        }
+      });
+      if (falhas > 0) {
+        setErro(
+          falhas === mensagensPreenchidas.length
+            ? "Não consegui ler nenhuma das mensagens."
+            : `Não consegui ler ${falhas} de ${mensagensPreenchidas.length} mensagens. As outras foram analisadas.`,
+        );
+      } else if (novas.length === 0) {
+        setErro("Não encontrei nenhuma carga nessas mensagens.");
+      }
       setOfertas(novas);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Erro ao ler a mensagem.");
+      setErro(e instanceof Error ? e.message : "Erro ao ler as mensagens.");
     } finally {
       setLendo(false);
     }
@@ -167,7 +209,7 @@ export default function CargasPage() {
   return (
     <>
       <h1>Qual carga vale mais?</h1>
-      <p className="lead">Cole a mensagem do grupo ou envie o print. Eu mostro o lucro de cada uma.</p>
+      <p className="lead">Cole uma ou várias mensagens do grupo, ou envie o print. Eu mostro o lucro de cada carga e comparo qual vale mais.</p>
 
       {semLocais && (
         <div className="note">
@@ -176,11 +218,44 @@ export default function CargasPage() {
       )}
 
       <div className="panel">
-        <label htmlFor="msg">Mensagem</label>
-        <textarea id="msg" value={texto} onChange={(e) => setTexto(e.target.value)} placeholder="Cole aqui o texto encaminhado do WhatsApp" />
-        <label htmlFor="img">Ou print da conversa</label>
-        <input id="img" type="file" accept="image/*" multiple onChange={(e) => setImagens(Array.from(e.target.files ?? []))} />
-        {imagens.length > 0 && <div className="hint">{imagens.length} imagem(ns) selecionada(s)</div>}
+        {mensagens.map((m, i) => (
+          <div key={m.id} className={i > 0 ? "msg-bloco" : undefined}>
+            {mensagens.length > 1 && (
+              <div className="msg-head">
+                <strong>Mensagem {i + 1}</strong>
+                <button type="button" className="small danger" onClick={() => removerMensagem(m.id)}>
+                  Remover
+                </button>
+              </div>
+            )}
+            <label htmlFor={`msg-${m.id}`}>Mensagem</label>
+            <textarea
+              id={`msg-${m.id}`}
+              value={m.texto}
+              onChange={(e) => atualizarMensagem(m.id, { texto: e.target.value })}
+              placeholder="Cole aqui o texto encaminhado do WhatsApp"
+            />
+            <label htmlFor={`img-${m.id}`}>Ou print da conversa</label>
+            <input
+              id={`img-${m.id}`}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(e) => atualizarMensagem(m.id, { imagens: Array.from(e.target.files ?? []) })}
+            />
+            {m.imagens.length > 0 && <div className="hint">{m.imagens.length} imagem(ns) selecionada(s)</div>}
+          </div>
+        ))}
+
+        <div className="actions">
+          <button type="button" className="sec" onClick={adicionarMensagem}>
+            + Adicionar outra mensagem
+          </button>
+        </div>
+        <p className="hint">
+          Recebeu várias cargas separadas? Cole cada uma num bloco diferente pra eu não misturar os dados — e eu
+          comparo todas de uma vez.
+        </p>
 
         <label htmlFor="pos">Onde você está agora</label>
         <select id="pos" value={posicaoId} onChange={(e) => setPosicaoId(e.target.value)}>
@@ -212,8 +287,12 @@ export default function CargasPage() {
 
         {erro && <div className="error">{erro}</div>}
         <div className="actions">
-          <button onClick={analisar} disabled={lendo || (!texto.trim() && imagens.length === 0)}>
-            {lendo ? "Lendo a mensagem..." : "Analisar cargas"}
+          <button onClick={analisar} disabled={lendo || mensagensPreenchidas.length === 0}>
+            {lendo
+              ? mensagensPreenchidas.length > 1
+                ? `Lendo ${mensagensPreenchidas.length} mensagens...`
+                : "Lendo a mensagem..."
+              : "Analisar cargas"}
           </button>
         </div>
       </div>

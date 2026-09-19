@@ -76,6 +76,13 @@ troque por um provedor de tiles com plano próprio (em `components/RouteMap.tsx`
 - Horário de viabilidade considera só o mesmo dia.
 - Valor sem unidade ("Tarifa: 45,00") é tratado como por tonelada, com aviso na tela.
 
+## Comparar várias mensagens de uma vez
+
+Na tela de Cargas, "+ Adicionar outra mensagem" abre um novo bloco de texto/print. Cada bloco é
+enviado para o Gemini separadamente (evita misturar valor/horário de uma mensagem com a rota de
+outra) e todas as cargas resultantes entram juntas no comparador, com um selo "Mensagem N" no
+cartão quando há mais de uma. Se uma mensagem falhar na leitura, as outras continuam normalmente.
+
 ## Fase 3 (parcial): conta e sincronização + PWA com "Compartilhar" (Android)
 
 **Conta (opcional).** Tela `/conta`: login por link mágico (e-mail), sem senha. Sem entrar,

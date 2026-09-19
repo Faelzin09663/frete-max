@@ -41,6 +41,8 @@ export type Oferta = {
   // ajustes manuais do motorista
   valorManual?: number | null;
   pedagioManualRS?: number | null;
+  // rótulo de qual mensagem colada deu origem a esta oferta (só quando há mais de uma)
+  origemMsg?: string;
 };
 
 export type Leg = {
