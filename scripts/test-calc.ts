@@ -1,5 +1,5 @@
 import { calcular, parseHora } from "../lib/calc.ts";
-import { acharLocal } from "../lib/match.ts";
+import { acharLocal, adicionarSinonimo, candidatosLocais, ehAmbiguo, resolverLocal } from "../lib/match.ts";
 import { decodePolyline } from "../lib/polyline.ts";
 import { montarMapa } from "../lib/mapa.ts";
 import type { Oferta, Truck, Local } from "../lib/types.ts";
@@ -89,6 +89,24 @@ eq("alerta consumo zerado", alertaConsumoZerado.avisos.some((a) => a.includes("C
 
 const alertaFreteBaixo = calcular({ oferta: { ...base, valor: 30 }, truck, toneladas: 30, vazio: leg(0, 0), cheio: leg(250, 200), ...semData });
 eq("alerta frete baixo para longa distância", alertaFreteBaixo.avisos.some((a) => a.includes("muito baixo")), true);
+
+// ---------- vários locais com o mesmo nome (ex.: 3 mineradoras em Sete Lagoas) ----------
+const mina = (id: string, ap: string, sin: string[] = []): Local => ({ id, apelido: ap, sinonimos: sin, endereco: `${ap}, Sete Lagoas`, lat: 0, lng: 0 });
+const tres = [mina("m1", "Mineradora Alfa", ["Sete Lagoas"]), mina("m2", "Mineradora Beta", ["Sete Lagoas"]), mina("m3", "Mineradora Gama", ["Sete Lagoas"])];
+eq("3 candidatos exatos para 'Sete Lagoas'", candidatosLocais("Sete Lagoas", tres).map((c) => c.local.id), ["m1", "m2", "m3"]);
+eq("é ambíguo", ehAmbiguo("Sete Lagoas", tres), true);
+eq("nome único não é ambíguo", ehAmbiguo("Mineradora Beta", tres), false);
+eq("sem escolha: usa o 1º (reconhecimento por nome)", resolverLocal("Sete Lagoas", null, tres)?.id, "m1");
+eq("escolha manual vale mais que o nome", resolverLocal("Sete Lagoas", "m2", tres)?.id, "m2");
+eq("escolha manual vale mesmo com nome diferente", resolverLocal("Xyz desconhecido", "m3", tres)?.id, "m3");
+eq("local escolhido e depois apagado: volta ao nome", resolverLocal("Sete Lagoas", "apagado", tres)?.id, "m1");
+eq("nada escolhido e nada reconhecido", resolverLocal("Xyz", null, tres), null);
+eq("exato vem antes de parecido", candidatosLocais("Sete Lagoas", [mina("p", "Posto Sete Lagoas Norte"), mina("e", "Sete Lagoas")]).map((c) => c.local.id), ["e", "p"]);
+const lembrado = adicionarSinonimo(tres[1], "Extrativa");
+eq("lembrar nome: vira sinônimo", lembrado.sinonimos, ["Sete Lagoas", "Extrativa"]);
+eq("lembrar nome: sem duplicar", adicionarSinonimo(lembrado, " extrativa ") === lembrado, true);
+eq("lembrar nome vazio não muda nada", adicionarSinonimo(tres[0], "  ") === tres[0], true);
+eq("depois de lembrar, 'Extrativa' acha a Beta", acharLocal("EXTRATIVA", [tres[0], lembrado, tres[2]])?.id, "m2");
 
 console.log(falhas === 0 ? "\nTodos os testes passaram." : `\n${falhas} falha(s).`);
 process.exit(falhas ? 1 : 0);

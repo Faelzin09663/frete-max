@@ -167,6 +167,22 @@ não usa IA.
 Código: `lib/plano.ts` (motor, testado em `scripts/test-plano.ts`), `lib/mapa.ts`
 (`montarMapaPlano`), `components/PlanoPanel.tsx` (tela).
 
+## Escolher o local certo na conferência
+
+Na tela *Conferir leitura da IA*, cada carga tem um seletor **Local de carregamento** e
+**Local de descarga**. Serve para quando há vários lugares com o mesmo nome (ex.: 3 mineradoras
+em Sete Lagoas): o seletor mostra o endereço de cada um, embaixo aparece o endereço completo com
+o link *Ver no mapa*, e dá para **cadastrar um local novo ali mesmo**.
+
+- Sem escolha, vale o reconhecimento automático pelo nome (o campo fica amarelo com o aviso
+  "Mais de um parecido" quando há empate, e "Não cadastrado" quando não acha nenhum).
+- A escolha manual vale mais que o nome e fica salva na oferta (`origemLocalId`/`destinoLocalId`).
+- *Lembrar* (desligado por padrão) grava o nome da mensagem como sinônimo do local escolhido,
+  para o app acertar sozinho da próxima vez. Deixe desligado para nomes genéricos como
+  "Sete Lagoas".
+
+Código: `components/LocalPicker.tsx`, `lib/match.ts` (`candidatosLocais`, `resolverLocal`).
+
 ## Memória: a análise não some mais
 
 - **Sessão** (`lib/sessao.tsx`): mensagem, posição, toneladas, ofertas lidas, revisão e

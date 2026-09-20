@@ -13,7 +13,7 @@ import { PlanoPanel } from "@/components/PlanoPanel";
 import { Note, PageHead, Segmented } from "@/components/ui";
 import { calcular, parseHora, valorEfetivo } from "@/lib/calc.ts";
 import { extrairOfertasComInfo, getLeg } from "@/lib/client-api.ts";
-import { acharLocal, normalizar } from "@/lib/match.ts";
+import { adicionarSinonimo, normalizar, resolverLocal } from "@/lib/match.ts";
 import { montarMapa } from "@/lib/mapa.ts";
 import { fmtNum } from "@/lib/format.ts";
 import { viagensDoPlano, type Carga, type Plano } from "@/lib/plano.ts";
@@ -210,8 +210,9 @@ function CargasConteudo() {
       const agoraMin = parseHora(agora);
       const out: Linha[] = [];
       for (const oferta of ofertas) {
-        const origem = acharLocal(oferta.origemTexto, locais);
-        const destino = acharLocal(oferta.destinoTexto, locais);
+        // vale o local escolhido à mão na conferência; sem escolha, reconhece pelo nome
+        const origem = resolverLocal(oferta.origemTexto, oferta.origemLocalId, locais);
+        const destino = resolverLocal(oferta.destinoTexto, oferta.destinoLocalId, locais);
         if (!origem || !destino) {
           out.push({ oferta, origem, destino, calc: null });
           continue;
@@ -355,6 +356,9 @@ function CargasConteudo() {
     return (
       <ReviewScreen
         ofertas={ofertasBrutas}
+        locais={locais}
+        onNovoLocal={(l) => setLocais((prev) => [...prev, l])}
+        onLembrarNome={(id, nome) => setLocais((prev) => prev.map((l) => (l.id === id ? adicionarSinonimo(l, nome) : l)))}
         onConfirmar={confirmarRevisao}
         onVoltar={voltarParaInput}
       />

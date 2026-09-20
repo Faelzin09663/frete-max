@@ -43,6 +43,10 @@ export type Oferta = {
   pedagioManualRS?: number | null;
   // rótulo de qual mensagem colada deu origem a esta oferta (só quando há mais de uma)
   origemMsg?: string;
+  // local escolhido à mão na conferência (quando há mais de um lugar com o mesmo nome).
+  // Se vazio, o app reconhece o local pelo nome digitado.
+  origemLocalId?: string | null;
+  destinoLocalId?: string | null;
 };
 
 export type Leg = {

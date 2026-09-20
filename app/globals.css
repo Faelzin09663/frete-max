@@ -871,3 +871,18 @@ table.break tr.total td { font-weight: 800; border-bottom: 0; font-size: 18px; }
 .tl-ponto small { display: block; margin-top: 2px; color: var(--muted); font-size: 13px; font-weight: 600; }
 .tl-vazio, .tl-cheio { margin-left: 7px; padding: 5px 0 5px 19px; font-size: 14px; font-weight: 600; color: var(--muted); border-left: 3px dotted var(--line-strong); }
 .tl-cheio { margin-left: 6px; color: var(--ink); border-left: 5px solid var(--ink); }
+
+/* ==========================================================================
+   Escolha do local certo na conferência (LocalPicker)
+   ========================================================================== */
+.picker { margin-top: 6px; padding: 10px; display: flex; flex-direction: column; gap: 8px; border-radius: var(--r-sm); background: var(--surface-2); border: 1px dashed var(--line-strong); }
+.picker.warn { background: var(--warn-bg); border: 1.5px solid var(--amber); }
+.picker > label { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.picker.warn > label { color: var(--warn); }
+.picker select { min-height: 48px; font-size: 15px; }
+.picker-end { margin: 0; font-size: 13px; line-height: 1.4; color: var(--muted); overflow-wrap: anywhere; }
+.picker-end a { font-weight: 700; color: var(--ink); white-space: nowrap; }
+.picker-end.warn { color: var(--warn); font-weight: 600; }
+.picker .chk { display: flex; align-items: flex-start; justify-content: flex-start; gap: 10px; font-size: 14px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--ink); }
+.picker .chk input { flex: none; width: 22px; height: 22px; min-height: 0; margin-top: 1px; }
+.picker-novo { margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--line); }

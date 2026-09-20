@@ -1,8 +1,9 @@
 "use client";
 import { useState } from "react";
 import { Icon } from "@/components/Icons";
+import { LocalPicker } from "@/components/LocalPicker";
 import { NumInput } from "@/components/NumInput";
-import type { Oferta, Unidade, Pedagio } from "@/lib/types.ts";
+import type { Local, Oferta, Unidade, Pedagio } from "@/lib/types.ts";
 
 /** Campos que a IA pode ter deduzido (aparecem em amarelo na conferência). */
 function foiDeduzido(oferta: Oferta, campo: string): boolean {
@@ -15,10 +16,20 @@ function foiDeduzido(oferta: Oferta, campo: string): boolean {
 function EditCard({
   oferta,
   index,
+  locais,
+  lembrarOrigem,
+  lembrarDestino,
+  onLembrar,
+  onNovoLocal,
   onChange,
 }: {
   oferta: Oferta;
   index: number;
+  locais: Local[];
+  lembrarOrigem: boolean;
+  lembrarDestino: boolean;
+  onLembrar: (lado: "o" | "d", v: boolean) => void;
+  onNovoLocal: (l: Local) => void | Promise<void>;
   onChange: (patch: Partial<Oferta>) => void;
 }) {
   return (
@@ -35,12 +46,32 @@ function EditCard({
             value={oferta.origemTexto}
             onChange={(e) => onChange({ origemTexto: e.target.value })}
           />
+          <LocalPicker
+            papel="origem"
+            texto={oferta.origemTexto}
+            escolhidoId={oferta.origemLocalId}
+            locais={locais}
+            lembrar={lembrarOrigem}
+            onEscolher={(id) => onChange({ origemLocalId: id })}
+            onLembrar={(v) => onLembrar("o", v)}
+            onNovoLocal={onNovoLocal}
+          />
         </div>
         <div className="review-field">
           <label>Destino</label>
           <input
             value={oferta.destinoTexto}
             onChange={(e) => onChange({ destinoTexto: e.target.value })}
+          />
+          <LocalPicker
+            papel="destino"
+            texto={oferta.destinoTexto}
+            escolhidoId={oferta.destinoLocalId}
+            locais={locais}
+            lembrar={lembrarDestino}
+            onEscolher={(id) => onChange({ destinoLocalId: id })}
+            onLembrar={(v) => onLembrar("d", v)}
+            onNovoLocal={onNovoLocal}
           />
         </div>
       </div>
@@ -119,14 +150,31 @@ function EditCard({
 
 export function ReviewScreen({
   ofertas,
+  locais,
+  onNovoLocal,
+  onLembrarNome,
   onConfirmar,
   onVoltar,
 }: {
   ofertas: Oferta[];
+  locais: Local[];
+  onNovoLocal: (l: Local) => void | Promise<void>;
+  onLembrarNome: (localId: string, nome: string) => void;
   onConfirmar: (corrigidas: Oferta[]) => void;
   onVoltar: () => void;
 }) {
   const [editadas, setEditadas] = useState<Oferta[]>(ofertas);
+  // "lembrar este nome para o local escolhido" (começa desligado: nomes genéricos como
+  // "Sete Lagoas" não devem virar sinônimo de uma mineradora só)
+  const [lembrar, setLembrar] = useState<Record<string, boolean>>({});
+
+  function confirmar() {
+    for (const o of editadas) {
+      if (lembrar[`${o.id}:o`] && o.origemLocalId) onLembrarNome(o.origemLocalId, o.origemTexto);
+      if (lembrar[`${o.id}:d`] && o.destinoLocalId) onLembrarNome(o.destinoLocalId, o.destinoTexto);
+    }
+    onConfirmar(editadas);
+  }
 
   function atualizar(index: number, patch: Partial<Oferta>) {
     setEditadas((prev) => prev.map((o, i) => (i === index ? { ...o, ...patch } : o)));
@@ -147,7 +195,8 @@ export function ReviewScreen({
       </header>
 
       <p className="lead" style={{ marginBottom: 4 }}>
-        Confira o que a IA entendeu de cada carga. Corrija o que estiver errado antes de calcular.
+        Confira o que a IA entendeu de cada carga. Se houver mais de um lugar com o mesmo nome (como várias
+        mineradoras na mesma cidade), escolha o local certo em cada carga.
       </p>
 
       {temDeduzido && (
@@ -160,14 +209,24 @@ export function ReviewScreen({
       )}
 
       {editadas.map((o, i) => (
-        <EditCard key={o.id} oferta={o} index={i} onChange={(p) => atualizar(i, p)} />
+        <EditCard
+          key={o.id}
+          oferta={o}
+          index={i}
+          locais={locais}
+          lembrarOrigem={!!lembrar[`${o.id}:o`]}
+          lembrarDestino={!!lembrar[`${o.id}:d`]}
+          onLembrar={(lado, v) => setLembrar((prev) => ({ ...prev, [`${o.id}:${lado}`]: v }))}
+          onNovoLocal={onNovoLocal}
+          onChange={(p) => atualizar(i, p)}
+        />
       ))}
 
       <div className="sticky-cta" style={{ background: "linear-gradient(to top, var(--bg) 68%, transparent)" }}>
         <button
           type="button"
           className="btn block"
-          onClick={() => onConfirmar(editadas)}
+          onClick={confirmar}
         >
           <Icon name="check" size={22} />
           Confirmar e calcular

@@ -11,7 +11,7 @@ const KEY = "fretemax:ia-cache";
 const VALIDADE_MS = 14 * 24 * 3600 * 1000; // 14 dias: cargas mudam rápido
 const MAX_ENTRADAS = 40;
 
-export type OfertaBruta = Omit<Oferta, "id" | "valorManual" | "pedagioManualRS">;
+export type OfertaBruta = Omit<Oferta, "id" | "valorManual" | "pedagioManualRS" | "origemLocalId" | "destinoLocalId">;
 type Entrada = { t: number; ofertas: OfertaBruta[] };
 type Store = Record<string, Entrada>;
 
