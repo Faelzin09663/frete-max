@@ -140,6 +140,44 @@ testar na prática, principalmente:
 - Compartilhar uma mensagem do WhatsApp pro FreteMax instalado num Android de verdade.
 - Editar um local ou o caminhão logado em dois aparelhos e ver se sincroniza nos dois.
 
+## Melhor sequência de cargas (casa → carga → carga → casa)
+
+Quando a análise tem 2 ou mais cargas com preço e locais cadastrados, aparece o painel
+**Melhor sequência**. Ele testa todas as ordens possíveis de até 2 a 5 cargas em fila
+(com 10 propostas e 3 cargas são ~800 combinações; com 4, ~5.800), saindo do ponto escolhido
+em *Onde você está agora* (ou da **Base** de Caminhão) e, se quiser, voltando para a Base.
+
+Para cada sequência conta: km vazio até a primeira origem, km cheio, km vazio entre uma
+descarga e a próxima origem, a volta, diesel, manutenção, pedágio (o reembolsado não entra),
+tempo de carga/descarga, e o relógio andando carga a carga para respeitar o
+"carregamento até HH:MM" de cada uma. Sequências que não chegam a tempo são descartadas.
+
+O ranking mostra as 3 melhores, cada uma com a explicação em português (por que pegar:
+quanto anda vazio, se a próxima carga fica perto do destino, se termina perto de casa),
+linha do tempo com horários, conta detalhada e mapa da rota inteira. O critério pode ser
+**lucro por hora** (padrão) ou **lucro total**. *Escolher esta sequência* registra uma
+viagem por carga no Painel.
+
+**Como não gasta rota à toa.** A busca roda primeiro com distâncias estimadas (grátis, em
+linha reta × 1,35) e só as melhores sequências recebem a rota real do Google. Com 10
+propostas isso costuma dar algumas dezenas de consultas na primeira vez (o máximo teórico
+seria mais de 100), e cada trecho fica guardado. O texto explicativo é gerado por código:
+não usa IA.
+
+Código: `lib/plano.ts` (motor, testado em `scripts/test-plano.ts`), `lib/mapa.ts`
+(`montarMapaPlano`), `components/PlanoPanel.tsx` (tela).
+
+## Memória: a análise não some mais
+
+- **Sessão** (`lib/sessao.tsx`): mensagem, posição, toneladas, ofertas lidas, revisão e
+  sequência ficam guardadas. Sair para Caminhão/Locais e voltar (ou recarregar o app) mantém
+  tudo. Vale por 24 h; *Limpar* começa uma análise nova. Os prints em si não são guardados
+  (são pesados), mas as ofertas lidas a partir deles sim.
+- **IA** (`lib/cache-ia.ts`): a mesma mensagem/print enviado de novo reaproveita a leitura
+  anterior e não chama o Gemini. Guarda 40 leituras por 14 dias.
+- **Rotas** (`lib/client-api.ts`): cada trecho A→B é pedido ao Google uma vez e fica em
+  memória e no aparelho por 60 dias (até 400 trechos). Pedidos iguais simultâneos viram um só.
+
 ## Próximos passos (Fase 4)
 
 Viagens concluídas, dashboard semanal, exportação para planilha, leitura de tíquete de descarga,

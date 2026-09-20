@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "node --experimental-strip-types scripts/test-calc.ts"
+    "test": "node --experimental-strip-types scripts/test-calc.ts && node --experimental-strip-types scripts/test-plano.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",

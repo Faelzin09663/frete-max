@@ -100,6 +100,9 @@ export type Viagem = {
   dieselRealRS?: number | null;
   pedagioRealRS?: number | null;
   lucroRealRS?: number | null;
+  // quando veio de uma sequência planejada (várias cargas em fila)
+  planoId?: string;
+  ordemNoPlano?: number;
 };
 
 export type Ponto = [number, number]; // [lat, lng]

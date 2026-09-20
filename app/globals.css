@@ -833,3 +833,41 @@ table.break tr.total td { font-weight: 800; border-bottom: 0; font-size: 18px; }
   gap: 10px;
 }
 
+
+/* ==========================================================================
+   Melhor sequência (casa → carga → carga → casa)
+   ========================================================================== */
+.plano { margin-top: 26px; }
+.plano-head { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
+.plano-head .ic { flex: none; width: 46px; height: 46px; border-radius: 15px; display: grid; place-items: center; background: var(--amber); color: var(--on-amber); }
+.plano-head h2 { margin: 0; }
+.plano-head p { margin: 4px 0 0; color: var(--muted); font-size: 15px; line-height: 1.4; }
+.plano-saida { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; font-size: 15px; color: var(--muted); }
+.plano-saida b { color: var(--ink); }
+.plano-cfg { display: grid; gap: 12px; margin-bottom: 12px; }
+.plano-cfg .field { margin: 0; }
+.plano-cfg .seg { display: grid; width: 100%; }
+
+.plano-card { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 16px; margin: 14px 0; box-shadow: var(--shadow); overflow: hidden; }
+.plano-card.best { border-color: var(--amber); box-shadow: 0 0 0 1px var(--amber), var(--shadow); }
+.plano-card > .btn.block { margin-top: 14px; }
+.plano-top { display: flex; gap: 12px; align-items: center; }
+.plano-top small { display: block; font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); line-height: 1.2; }
+.rank { flex: none; width: 50px; height: 50px; border-radius: 50%; display: grid; place-items: center; background: var(--asphalt); color: var(--on-asphalt); font-family: var(--font-num); font-size: 25px; font-weight: 700; }
+.plano-card.best .rank { background: var(--amber); color: var(--on-amber); }
+.chain { display: block; font-family: var(--font-num); font-size: 24px; line-height: 1.12; font-weight: 700; overflow-wrap: anywhere; }
+
+.why { margin-top: 14px; padding: 12px 14px; border-radius: var(--r-md); background: var(--surface-2); border: 1px solid var(--line); }
+.why b { font-family: var(--font-num); font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--amber-text); }
+.why p { margin: 6px 0 0; font-size: 16px; line-height: 1.5; }
+
+/* linha do tempo trecho a trecho */
+.tl { list-style: none; margin: 8px 0 0; padding: 0; }
+.tl-ponto { display: flex; gap: 12px; align-items: flex-start; padding: 6px 0; }
+.tl-ponto i { flex: none; width: 16px; height: 16px; margin-top: 3px; border-radius: 50%; background: var(--amber); border: 3px solid var(--asphalt); }
+.tl-ponto.to i { background: var(--gain); }
+.tl-ponto.fim i { background: var(--asphalt); }
+.tl-ponto strong { display: block; font-family: var(--font-num); font-size: 19px; line-height: 1.15; }
+.tl-ponto small { display: block; margin-top: 2px; color: var(--muted); font-size: 13px; font-weight: 600; }
+.tl-vazio, .tl-cheio { margin-left: 7px; padding: 5px 0 5px 19px; font-size: 14px; font-weight: 600; color: var(--muted); border-left: 3px dotted var(--line-strong); }
+.tl-cheio { margin-left: 6px; color: var(--ink); border-left: 5px solid var(--ink); }

@@ -9,22 +9,21 @@ import { NumInput } from "@/components/NumInput";
 import { OfferCard, type Selo } from "@/components/OfferCard";
 import { ReviewScreen } from "@/components/ReviewScreen";
 import { ComparePanel } from "@/components/ComparePanel";
+import { PlanoPanel } from "@/components/PlanoPanel";
 import { Note, PageHead, Segmented } from "@/components/ui";
 import { calcular, parseHora, valorEfetivo } from "@/lib/calc.ts";
-import { extrairOfertas, getLeg } from "@/lib/client-api.ts";
+import { extrairOfertasComInfo, getLeg } from "@/lib/client-api.ts";
 import { acharLocal, normalizar } from "@/lib/match.ts";
 import { montarMapa } from "@/lib/mapa.ts";
 import { fmtNum } from "@/lib/format.ts";
+import { viagensDoPlano, type Carga, type Plano } from "@/lib/plano.ts";
+import { useCampoSessao, usePronto, type Mensagem } from "@/lib/sessao";
 import { useLocais, useTruck, useViagens, novoId } from "@/lib/storage.ts";
 import type { CalcResult, Leg, Local, MapaDados, Oferta, Viagem } from "@/lib/types.ts";
 
-type Mensagem = { id: string; texto: string; imagens: File[] };
 type Linha = { oferta: Oferta; origem: Local | null; destino: Local | null; calc: CalcResult | null; mapa?: MapaDados };
 
-type Fase = "INPUT" | "REVISAO" | "RESULTADO";
-
 const ZERO: Leg = { km: 0, min: 0, tollRS: 0, estimado: false };
-const mensagemVazia = (id = "principal"): Mensagem => ({ id, texto: "", imagens: [] });
 
 function horaAgora(): string {
   const d = new Date();
@@ -69,22 +68,31 @@ function CargasConteudo() {
   const [locais, setLocais, locaisPronto] = useLocais();
   const [, setViagens] = useViagens();
 
-  const [mensagens, setMensagens] = useState<Mensagem[]>([mensagemVazia()]);
-  const [posicaoId, setPosicaoId] = useState("");
-  const [agora, setAgora] = useState("");
-  const [toneladas, setToneladas] = useState<number | null>(null);
-  const [comRetorno, setComRetorno] = useState(false);
-  const [ordem, setOrdem] = useState<"LUCRO" | "HORA">("HORA");
+  // Tudo abaixo vive na sessão (lib/sessao.tsx): sobrevive à troca de tela e ao recarregar,
+  // então sair para "Caminhão" e voltar não apaga a análise nem gasta IA/rotas de novo.
+  const sessaoPronta = usePronto();
+  const [mensagens, setMensagens] = useCampoSessao("mensagens");
+  const [posicaoId, setPosicaoId] = useCampoSessao("posicaoId");
+  const [agora, setAgora] = useCampoSessao("agora");
+  const [agoraManual, setAgoraManual] = useCampoSessao("agoraManual");
+  const [toneladas, setToneladas] = useCampoSessao("toneladas");
+  const [comRetorno, setComRetorno] = useCampoSessao("comRetorno");
+  const [ordem, setOrdem] = useCampoSessao("ordem");
+  const [, setPlanoCfg] = useCampoSessao("plano");
 
-  const [fase, setFase] = useState<Fase>("INPUT");
-  const [ofertasBrutas, setOfertasBrutas] = useState<Oferta[]>([]); // raw from AI
-  const [ofertas, setOfertas] = useState<Oferta[]>([]); // confirmed after review
+  const [fase, setFase] = useCampoSessao("fase");
+  const [ofertasBrutas, setOfertasBrutas] = useCampoSessao("ofertasBrutas"); // como veio da IA
+  const [ofertas, setOfertas] = useCampoSessao("ofertas"); // confirmadas na revisão
   const [linhas, setLinhas] = useState<Linha[]>([]);
+  const [infoIA, setInfoIA] = useState<string | null>(null);
   const [lendo, setLendo] = useState(false);
   const [calculando, setCalculando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  useEffect(() => setAgora(horaAgora()), []);
+  useEffect(() => {
+    if (!agoraManual) setAgora(horaAgora());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessaoPronta]);
 
   function atualizarMensagem(patch: Partial<Mensagem>) {
     setMensagens((prev) => [{ ...prev[0], ...patch }]);
@@ -104,10 +112,18 @@ function CargasConteudo() {
   // usado pelo handoff do "Compartilhar": preenche o campo único
   function definirMensagemUnica(texto: string, imagens: File[]) {
     setMensagens((prev) => [{ ...prev[0], texto, imagens }]);
+    // mensagem nova = análise nova (não mistura com o resultado de antes)
+    setFase("INPUT");
+    setOfertasBrutas([]);
+    setOfertas([]);
+    setLinhas([]);
+    setInfoIA(null);
+    setPlanoCfg((p) => ({ ...p, ativo: false }));
   }
 
   // conteúdo recebido pelo "Compartilhar" do WhatsApp (veja app/compartilhar)
   useEffect(() => {
+    if (!sessaoPronta) return;
     if (searchParams.get("compartilhado") === "1") {
       const dados = consumirCompartilhado();
       if (dados && (dados.texto || dados.imagens.length > 0)) {
@@ -122,7 +138,7 @@ function CargasConteudo() {
       router.replace("/");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [sessaoPronta]);
 
   const ton = toneladas ?? truck.capacidadeT;
   const base = comRetorno ? locais.find((l) => l.id === truck.baseLocalId) ?? null : null;
@@ -133,16 +149,23 @@ function CargasConteudo() {
     setErro(null);
     setLendo(true);
     try {
-      const resultados = await Promise.allSettled(mensagensPreenchidas.map((m) => extrairOfertas(m.texto, m.imagens)));
+      const resultados = await Promise.allSettled(mensagensPreenchidas.map((m) => extrairOfertasComInfo(m.texto, m.imagens)));
       const novas: Oferta[] = [];
       let falhas = 0;
+      let doCache = 0;
       resultados.forEach((r) => {
         if (r.status === "fulfilled") {
-          novas.push(...r.value);
+          novas.push(...r.value.ofertas);
+          if (r.value.doCache) doCache++;
         } else {
           falhas++;
         }
       });
+      setInfoIA(
+        doCache > 0 && doCache === resultados.length - falhas
+          ? "Essa mensagem já tinha sido lida: reaproveitei a resposta guardada, sem gastar IA."
+          : null,
+      );
       if (falhas > 0) {
         setErro(
           falhas === mensagensPreenchidas.length
@@ -173,11 +196,13 @@ function CargasConteudo() {
     setOfertasBrutas([]);
     setOfertas([]);
     setLinhas([]);
+    setInfoIA(null);
+    setPlanoCfg((p) => ({ ...p, ativo: false }));
   }
 
   // Recalcula tudo sempre que ofertas, locais ou configurações mudam. Rotas ficam em cache.
   useEffect(() => {
-    if (!truckPronto || !locaisPronto || fase !== "RESULTADO") return;
+    if (!sessaoPronta || !truckPronto || !locaisPronto || fase !== "RESULTADO") return;
     let cancelado = false;
     (async () => {
       setCalculando(true);
@@ -218,7 +243,7 @@ function CargasConteudo() {
       cancelado = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ofertas, locais, truck, posicaoId, agora, ton, base?.id, truckPronto, locaisPronto, fase]);
+  }, [ofertas, locais, truck, posicaoId, agora, ton, base?.id, truckPronto, locaisPronto, sessaoPronta, fase]);
 
   function editar(id: string, patch: Partial<Oferta>) {
     setOfertas((prev) => prev.map((o) => (o.id === id ? { ...o, ...patch } : o)));
@@ -243,6 +268,20 @@ function CargasConteudo() {
       toneladas: ton,
     };
     setViagens((prev) => [viagem, ...prev]);
+    router.push("/viagens");
+  }
+
+  function escolherPlano(p: Plano) {
+    const planoId = novoId();
+    const quando = new Date().toISOString();
+    const novas: Viagem[] = viagensDoPlano(p, ton, truck).map((v) => ({
+      id: novoId(),
+      realizadaEm: quando,
+      status: "ESCOLHIDA",
+      planoId,
+      ...v,
+    }));
+    setViagens((prev) => [...novas, ...prev]);
     router.push("/viagens");
   }
 
@@ -294,6 +333,22 @@ function CargasConteudo() {
         calc: l.calc,
       }));
   }, [calculadas.ok]);
+
+  // Sequência (casa → carga → carga → casa): só entram cargas com preço e locais conhecidos
+  const cargasPlano = useMemo<Carga[]>(
+    () =>
+      linhas
+        .filter(
+          (l): l is Linha & { origem: Local; destino: Local } =>
+            !!l.origem && !!l.destino && l.origem.id !== l.destino.id && valorEfetivo(l.oferta) != null,
+        )
+        .map((l) => ({ oferta: l.oferta, origem: l.origem, destino: l.destino })),
+    [linhas],
+  );
+  const basePlano = locais.find((l) => l.id === truck.baseLocalId) ?? null;
+  const inicioPlano = locais.find((l) => l.id === posicaoId) ?? basePlano;
+
+  if (!sessaoPronta) return <div className="skel" />;
 
   // ---- PHASE: REVIEW ----
   if (fase === "REVISAO") {
@@ -379,7 +434,7 @@ function CargasConteudo() {
         <div className="grid2">
           <div className="field">
             <label htmlFor="hora">Hora agora</label>
-            <input id="hora" type="time" value={agora} onChange={(e) => setAgora(e.target.value)} />
+            <input id="hora" type="time" value={agora} onChange={(e) => { setAgora(e.target.value); setAgoraManual(true); }} />
           </div>
           <div className="field">
             <label htmlFor="ton">Carga</label>
@@ -403,6 +458,11 @@ function CargasConteudo() {
         {erro && (
           <Note tone="loss" icon="alert">
             {erro}
+          </Note>
+        )}
+        {infoIA && (
+          <Note tone="gain" icon="check">
+            {infoIA}
           </Note>
         )}
 
@@ -438,6 +498,20 @@ function CargasConteudo() {
         </>
       )}
 
+      {/* Sequência: casa → carga → carga → casa (com 2+ cargas utilizáveis) */}
+      {fase === "RESULTADO" && cargasPlano.length >= 2 && (
+        <PlanoPanel
+          cargas={cargasPlano}
+          excluidas={linhas.length - cargasPlano.length}
+          truck={truck}
+          inicio={inicioPlano}
+          base={basePlano}
+          toneladas={ton}
+          agoraMin={parseHora(agora)}
+          onEscolher={escolherPlano}
+        />
+      )}
+
       {/* Comparison Panel - shows when 2+ viable loads */}
       {compareLinhas.length >= 2 && <ComparePanel linhas={compareLinhas} />}
 
@@ -447,7 +521,7 @@ function CargasConteudo() {
             <div>
               <h2>Resultado</h2>
               <p className="hint">
-                {calculadas.ok.length} {calculadas.ok.length === 1 ? "carga" : "cargas"} · {fmtNum(ton)} t
+                {calculadas.ok.length} {calculadas.ok.length === 1 ? "carga" : "cargas"} · {fmtNum(ton)} t · análise salva neste aparelho
               </p>
             </div>
             <Segmented
