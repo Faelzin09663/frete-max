@@ -9,16 +9,17 @@ import { NumInput } from "@/components/NumInput";
 import { OfferCard, type Selo } from "@/components/OfferCard";
 import { ReviewScreen } from "@/components/ReviewScreen";
 import { ComparePanel } from "@/components/ComparePanel";
-import { PlanoPanel } from "@/components/PlanoPanel";
+import { RoutePlanner } from "@/components/RoutePlanner";
 import { Note, PageHead, Segmented } from "@/components/ui";
 import { calcular, parseHora, valorEfetivo } from "@/lib/calc.ts";
-import { extrairOfertasComInfo, getLeg } from "@/lib/client-api.ts";
-import { adicionarSinonimo, normalizar, resolverLocal } from "@/lib/match.ts";
-import { montarMapa } from "@/lib/mapa.ts";
+import { extrairOfertas, getLeg, getLegsMapa, geocodificarReverso } from "@/lib/client-api.ts";
+import { GPS_ATUAL_ID, geolocalizacaoDisponivel, obterCoordenadasAtuais } from "@/lib/geo.ts";
+import { acharLocal, normalizar } from "@/lib/match.ts";
+import { montarMapa, montarMapaSequencia } from "@/lib/mapa.ts";
 import { fmtNum } from "@/lib/format.ts";
-import { viagensDoPlano, type Carga, type Plano } from "@/lib/plano.ts";
-import { useCampoSessao, usePronto, type Mensagem } from "@/lib/sessao";
 import { useLocais, useTruck, useViagens, novoId } from "@/lib/storage.ts";
+import { useAnalise, type Mensagem } from "@/lib/analise.tsx";
+import { gerarSequencias, paresParaSequencia, type ParadaCarga, type ResultadoRotas } from "@/lib/rota.ts";
 import type { CalcResult, Leg, Local, MapaDados, Oferta, Viagem } from "@/lib/types.ts";
 
 type Linha = { oferta: Oferta; origem: Local | null; destino: Local | null; calc: CalcResult | null; mapa?: MapaDados };
@@ -68,31 +69,73 @@ function CargasConteudo() {
   const [locais, setLocais, locaisPronto] = useLocais();
   const [, setViagens] = useViagens();
 
-  // Tudo abaixo vive na sessão (lib/sessao.tsx): sobrevive à troca de tela e ao recarregar,
-  // então sair para "Caminhão" e voltar não apaga a análise nem gasta IA/rotas de novo.
-  const sessaoPronta = usePronto();
-  const [mensagens, setMensagens] = useCampoSessao("mensagens");
-  const [posicaoId, setPosicaoId] = useCampoSessao("posicaoId");
-  const [agora, setAgora] = useCampoSessao("agora");
-  const [agoraManual, setAgoraManual] = useCampoSessao("agoraManual");
-  const [toneladas, setToneladas] = useCampoSessao("toneladas");
-  const [comRetorno, setComRetorno] = useCampoSessao("comRetorno");
-  const [ordem, setOrdem] = useCampoSessao("ordem");
-  const [, setPlanoCfg] = useCampoSessao("plano");
+  // Estado da análise: fica no contexto (lib/analise.tsx), fora desta página, então
+  // não se perde se o motorista for em Caminhão ajustar os custos e voltar.
+  const {
+    mensagens,
+    setMensagens,
+    posicaoId,
+    setPosicaoId,
+    localGps,
+    setLocalGps,
+    agora,
+    setAgora,
+    toneladas,
+    setToneladas,
+    comRetorno,
+    setComRetorno,
+    ordem,
+    setOrdem,
+    maxParadas,
+    setMaxParadas,
+    prazoVoltaH,
+    setPrazoVoltaH,
+    fase,
+    setFase,
+    ofertasBrutas,
+    setOfertasBrutas,
+    ofertas,
+    setOfertas,
+    reiniciar,
+  } = useAnalise();
 
-  const [fase, setFase] = useCampoSessao("fase");
-  const [ofertasBrutas, setOfertasBrutas] = useCampoSessao("ofertasBrutas"); // como veio da IA
-  const [ofertas, setOfertas] = useCampoSessao("ofertas"); // confirmadas na revisão
   const [linhas, setLinhas] = useState<Linha[]>([]);
-  const [infoIA, setInfoIA] = useState<string | null>(null);
   const [lendo, setLendo] = useState(false);
   const [calculando, setCalculando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
+  const [resultadoRotas, setResultadoRotas] = useState<ResultadoRotas | null>(null);
+  const [calculandoRota, setCalculandoRota] = useState(false);
+  const [buscandoGps, setBuscandoGps] = useState(false);
+  const [erroGps, setErroGps] = useState<string | null>(null);
+  // Geolocation só existe no navegador: decide depois de montar, pra não divergir do HTML do servidor.
+  const [gpsDisponivel, setGpsDisponivel] = useState(false);
+  useEffect(() => setGpsDisponivel(geolocalizacaoDisponivel()), []);
+
+  async function buscarLocalizacaoAtual() {
+    setErroGps(null);
+    setBuscandoGps(true);
+    try {
+      const { lat, lng } = await obterCoordenadasAtuais();
+      let endereco = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+      try {
+        const g = await geocodificarReverso(lat, lng);
+        endereco = g.formatado;
+      } catch {
+        /* sem endereço legível, mas as coordenadas do GPS já bastam pro cálculo */
+      }
+      setLocalGps({ id: GPS_ATUAL_ID, apelido: "Minha localização agora", sinonimos: [], endereco, lat, lng });
+    } catch (e) {
+      setErroGps(e instanceof Error ? e.message : "Não consegui pegar sua localização.");
+    } finally {
+      setBuscandoGps(false);
+    }
+  }
+
   useEffect(() => {
-    if (!agoraManual) setAgora(horaAgora());
+    if (!agora) setAgora(horaAgora());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessaoPronta]);
+  }, []);
 
   function atualizarMensagem(patch: Partial<Mensagem>) {
     setMensagens((prev) => [{ ...prev[0], ...patch }]);
@@ -112,18 +155,10 @@ function CargasConteudo() {
   // usado pelo handoff do "Compartilhar": preenche o campo único
   function definirMensagemUnica(texto: string, imagens: File[]) {
     setMensagens((prev) => [{ ...prev[0], texto, imagens }]);
-    // mensagem nova = análise nova (não mistura com o resultado de antes)
-    setFase("INPUT");
-    setOfertasBrutas([]);
-    setOfertas([]);
-    setLinhas([]);
-    setInfoIA(null);
-    setPlanoCfg((p) => ({ ...p, ativo: false }));
   }
 
   // conteúdo recebido pelo "Compartilhar" do WhatsApp (veja app/compartilhar)
   useEffect(() => {
-    if (!sessaoPronta) return;
     if (searchParams.get("compartilhado") === "1") {
       const dados = consumirCompartilhado();
       if (dados && (dados.texto || dados.imagens.length > 0)) {
@@ -138,9 +173,10 @@ function CargasConteudo() {
       router.replace("/");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessaoPronta]);
+  }, []);
 
   const ton = toneladas ?? truck.capacidadeT;
+  const pos = posicaoId === GPS_ATUAL_ID ? localGps : locais.find((l) => l.id === posicaoId) ?? null;
   const base = comRetorno ? locais.find((l) => l.id === truck.baseLocalId) ?? null : null;
 
   const mensagensPreenchidas = mensagens.filter((m) => m.texto.trim() || m.imagens.length > 0);
@@ -149,23 +185,16 @@ function CargasConteudo() {
     setErro(null);
     setLendo(true);
     try {
-      const resultados = await Promise.allSettled(mensagensPreenchidas.map((m) => extrairOfertasComInfo(m.texto, m.imagens)));
+      const resultados = await Promise.allSettled(mensagensPreenchidas.map((m) => extrairOfertas(m.texto, m.imagens)));
       const novas: Oferta[] = [];
       let falhas = 0;
-      let doCache = 0;
       resultados.forEach((r) => {
         if (r.status === "fulfilled") {
-          novas.push(...r.value.ofertas);
-          if (r.value.doCache) doCache++;
+          novas.push(...r.value);
         } else {
           falhas++;
         }
       });
-      setInfoIA(
-        doCache > 0 && doCache === resultados.length - falhas
-          ? "Essa mensagem já tinha sido lida: reaproveitei a resposta guardada, sem gastar IA."
-          : null,
-      );
       if (falhas > 0) {
         setErro(
           falhas === mensagensPreenchidas.length
@@ -196,23 +225,19 @@ function CargasConteudo() {
     setOfertasBrutas([]);
     setOfertas([]);
     setLinhas([]);
-    setInfoIA(null);
-    setPlanoCfg((p) => ({ ...p, ativo: false }));
   }
 
   // Recalcula tudo sempre que ofertas, locais ou configurações mudam. Rotas ficam em cache.
   useEffect(() => {
-    if (!sessaoPronta || !truckPronto || !locaisPronto || fase !== "RESULTADO") return;
+    if (!truckPronto || !locaisPronto || fase !== "RESULTADO") return;
     let cancelado = false;
     (async () => {
       setCalculando(true);
-      const pos = locais.find((l) => l.id === posicaoId) ?? null;
       const agoraMin = parseHora(agora);
       const out: Linha[] = [];
       for (const oferta of ofertas) {
-        // vale o local escolhido à mão na conferência; sem escolha, reconhece pelo nome
-        const origem = resolverLocal(oferta.origemTexto, oferta.origemLocalId, locais);
-        const destino = resolverLocal(oferta.destinoTexto, oferta.destinoLocalId, locais);
+        const origem = acharLocal(oferta.origemTexto, locais);
+        const destino = acharLocal(oferta.destinoTexto, locais);
         if (!origem || !destino) {
           out.push({ oferta, origem, destino, calc: null });
           continue;
@@ -244,7 +269,7 @@ function CargasConteudo() {
       cancelado = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ofertas, locais, truck, posicaoId, agora, ton, base?.id, truckPronto, locaisPronto, sessaoPronta, fase]);
+  }, [ofertas, locais, truck, posicaoId, pos?.lat, pos?.lng, agora, ton, base?.id, truckPronto, locaisPronto, fase]);
 
   function editar(id: string, patch: Partial<Oferta>) {
     setOfertas((prev) => prev.map((o) => (o.id === id ? { ...o, ...patch } : o)));
@@ -269,20 +294,6 @@ function CargasConteudo() {
       toneladas: ton,
     };
     setViagens((prev) => [viagem, ...prev]);
-    router.push("/viagens");
-  }
-
-  function escolherPlano(p: Plano) {
-    const planoId = novoId();
-    const quando = new Date().toISOString();
-    const novas: Viagem[] = viagensDoPlano(p, ton, truck).map((v) => ({
-      id: novoId(),
-      realizadaEm: quando,
-      status: "ESCOLHIDA",
-      planoId,
-      ...v,
-    }));
-    setViagens((prev) => [...novas, ...prev]);
     router.push("/viagens");
   }
 
@@ -335,30 +346,65 @@ function CargasConteudo() {
       }));
   }, [calculadas.ok]);
 
-  // Sequência (casa → carga → carga → casa): só entram cargas com preço e locais conhecidos
-  const cargasPlano = useMemo<Carga[]>(
-    () =>
-      linhas
-        .filter(
-          (l): l is Linha & { origem: Local; destino: Local } =>
-            !!l.origem && !!l.destino && l.origem.id !== l.destino.id && valorEfetivo(l.oferta) != null,
-        )
-        .map((l) => ({ oferta: l.oferta, origem: l.origem, destino: l.destino })),
-    [linhas],
+  // Cargas prontas para entrar numa sequência de rota: precisam de origem, destino e frete.
+  const paradasRota: ParadaCarga[] = useMemo(
+    () => calculadas.ok.map((l) => ({ oferta: l.oferta, origem: l.origem!, destino: l.destino! })),
+    [calculadas.ok],
   );
-  const basePlano = locais.find((l) => l.id === truck.baseLocalId) ?? null;
-  const inicioPlano = locais.find((l) => l.id === posicaoId) ?? basePlano;
 
-  if (!sessaoPronta) return <div className="skel" />;
+  // Planejamento de rota: início (posição) -> meio (cargas em sequência) -> fim (base, se marcado
+  // "contar a volta"). Testa as ordens possíveis das cargas coladas, buscando cada trecho entre
+  // pontos só uma vez (com o mesmo cache de rota do restante do app) e reaproveitando esse mapa
+  // de trechos para todas as ordens testadas — sem gastar API extra por ordem.
+  useEffect(() => {
+    if (fase !== "RESULTADO" || !pos || paradasRota.length < 2) {
+      setResultadoRotas(null);
+      return;
+    }
+    let cancelado = false;
+    (async () => {
+      setCalculandoRota(true);
+      try {
+        const pares = paresParaSequencia(pos, paradasRota, base);
+        const legs = await getLegsMapa(pares);
+        if (cancelado) return;
+        const resultado = gerarSequencias({
+          paradas: paradasRota,
+          truck,
+          toneladas: ton,
+          pos,
+          base,
+          legs,
+          agoraMin: parseHora(agora),
+          maxParadas,
+          ordenarPor: ordem,
+          prazoHoras: prazoVoltaH,
+        });
+        if (!cancelado) setResultadoRotas(resultado);
+      } catch (e) {
+        if (!cancelado) setErro(e instanceof Error ? e.message : "Erro ao calcular a sequência de rota.");
+      } finally {
+        if (!cancelado) setCalculandoRota(false);
+      }
+    })();
+    return () => {
+      cancelado = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paradasRota, pos?.id, pos?.lat, pos?.lng, base?.id, truck, ton, agora, maxParadas, ordem, prazoVoltaH, fase]);
+
+  // Mapa da melhor sequência (todos os trechos, num só desenho)
+  const mapaMelhorRota = useMemo(() => {
+    const melhor = resultadoRotas?.melhores[0];
+    if (!melhor || !pos) return null;
+    return montarMapaSequencia(pos, melhor.etapas, base, melhor.retorno);
+  }, [resultadoRotas, pos, base]);
 
   // ---- PHASE: REVIEW ----
   if (fase === "REVISAO") {
     return (
       <ReviewScreen
         ofertas={ofertasBrutas}
-        locais={locais}
-        onNovoLocal={(l) => setLocais((prev) => [...prev, l])}
-        onLembrarNome={(id, nome) => setLocais((prev) => prev.map((l) => (l.id === id ? adicionarSinonimo(l, nome) : l)))}
         onConfirmar={confirmarRevisao}
         onVoltar={voltarParaInput}
       />
@@ -372,6 +418,16 @@ function CargasConteudo() {
         title="Qual carga vale mais?"
         lead="Cole as ofertas do WhatsApp ou anexe os prints. Eu separo cada carga, calculo o lucro e mostro qual rota compensa."
       />
+
+      {fase === "RESULTADO" && (
+        <div className="row between" style={{ marginBottom: 14 }}>
+          <span className="hint">Resultado da última análise, salvo automaticamente</span>
+          <button type="button" className="btn ghost sm" onClick={reiniciar}>
+            <Icon name="plus" size={16} />
+            Nova análise
+          </button>
+        </div>
+      )}
 
       {fase === "INPUT" && !lendo && (
         <ol className="steps" aria-label="Como funciona">
@@ -425,20 +481,52 @@ function CargasConteudo() {
 
         <div className="field">
           <label htmlFor="pos">Onde você está agora</label>
-          <select id="pos" value={posicaoId} onChange={(e) => setPosicaoId(e.target.value)}>
+          <select
+            id="pos"
+            value={posicaoId}
+            onChange={(e) => {
+              const v = e.target.value;
+              setPosicaoId(v);
+              if (v === GPS_ATUAL_ID) buscarLocalizacaoAtual();
+            }}
+          >
             <option value="">Já estou na origem (sem km vazio)</option>
+            {gpsDisponivel && <option value={GPS_ATUAL_ID}>📍 Minha localização agora (GPS)</option>}
             {locais.map((l) => (
               <option key={l.id} value={l.id}>
                 {l.apelido}
               </option>
             ))}
           </select>
+
+          {posicaoId === GPS_ATUAL_ID && (
+            <div className="row between" style={{ marginTop: 8 }}>
+              <p className="hint" style={{ margin: 0 }}>
+                {buscandoGps ? (
+                  <>
+                    <span className="spinner" aria-hidden="true" style={{ marginRight: 6 }} />
+                    Pegando sua localização...
+                  </>
+                ) : localGps ? (
+                  <>
+                    <Icon name="pin" size={14} /> {localGps.endereco}
+                  </>
+                ) : (
+                  "Toque em atualizar para captar o GPS."
+                )}
+              </p>
+              <button type="button" className="btn ghost sm" onClick={buscarLocalizacaoAtual} disabled={buscandoGps}>
+                Atualizar
+              </button>
+            </div>
+          )}
+          {posicaoId === GPS_ATUAL_ID && erroGps && <Note tone="loss">{erroGps}</Note>}
         </div>
 
         <div className="grid2">
           <div className="field">
             <label htmlFor="hora">Hora agora</label>
-            <input id="hora" type="time" value={agora} onChange={(e) => { setAgora(e.target.value); setAgoraManual(true); }} />
+            <input id="hora" type="time" value={agora} onChange={(e) => setAgora(e.target.value)} />
           </div>
           <div className="field">
             <label htmlFor="ton">Carga</label>
@@ -462,11 +550,6 @@ function CargasConteudo() {
         {erro && (
           <Note tone="loss" icon="alert">
             {erro}
-          </Note>
-        )}
-        {infoIA && (
-          <Note tone="gain" icon="check">
-            {infoIA}
           </Note>
         )}
 
@@ -502,18 +585,24 @@ function CargasConteudo() {
         </>
       )}
 
-      {/* Sequência: casa → carga → carga → casa (com 2+ cargas utilizáveis) */}
-      {fase === "RESULTADO" && cargasPlano.length >= 2 && (
-        <PlanoPanel
-          cargas={cargasPlano}
-          excluidas={linhas.length - cargasPlano.length}
-          truck={truck}
-          inicio={inicioPlano}
-          base={basePlano}
-          toneladas={ton}
-          agoraMin={parseHora(agora)}
-          onEscolher={escolherPlano}
+      {/* Sequência de rota: início (posição) -> meio (cargas em ordem) -> fim (base, se marcado) */}
+      {pos && paradasRota.length >= 2 && (
+        <RoutePlanner
+          resultado={resultadoRotas}
+          carregando={calculandoRota}
+          posNome={pos.apelido}
+          baseNome={base?.apelido ?? null}
+          mapaMelhor={mapaMelhorRota}
+          maxParadas={maxParadas}
+          onMaxParadas={setMaxParadas}
+          prazoVoltaH={prazoVoltaH}
+          onPrazoVoltaH={setPrazoVoltaH}
         />
+      )}
+      {!pos && paradasRota.length >= 2 && (
+        <Note tone="warn" icon="road">
+          Escolha "Onde você está agora" acima para eu montar a sequência de rota entre essas cargas.
+        </Note>
       )}
 
       {/* Comparison Panel - shows when 2+ viable loads */}
@@ -525,7 +614,7 @@ function CargasConteudo() {
             <div>
               <h2>Resultado</h2>
               <p className="hint">
-                {calculadas.ok.length} {calculadas.ok.length === 1 ? "carga" : "cargas"} · {fmtNum(ton)} t · análise salva neste aparelho
+                {calculadas.ok.length} {calculadas.ok.length === 1 ? "carga" : "cargas"} · {fmtNum(ton)} t
               </p>
             </div>
             <Segmented

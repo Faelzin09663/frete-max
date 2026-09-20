@@ -7,7 +7,7 @@ import { Topbar } from "@/components/Topbar";
 import { PwaRegister } from "@/components/PwaRegister";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { AuthProvider } from "@/lib/auth";
-import { SessaoProvider } from "@/lib/sessao";
+import { AnaliseProvider } from "@/lib/analise.tsx";
 
 const body = Barlow({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--f-body" });
 const num = Barlow_Condensed({ subsets: ["latin"], weight: ["500", "600", "700"], variable: "--f-num" });
@@ -38,12 +38,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="pt-BR" className={`${body.variable} ${num.variable}`}>
       <body>
         <AuthProvider>
-          <SessaoProvider>
+          <AnaliseProvider>
             <OfflineBanner />
             <Topbar />
             <main className="wrap">{children}</main>
             <Nav />
-          </SessaoProvider>
+          </AnaliseProvider>
         </AuthProvider>
         <PwaRegister />
       </body>

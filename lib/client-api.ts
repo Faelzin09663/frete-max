@@ -1,132 +1,88 @@
 import type { Leg, Local, Oferta } from "./types.ts";
-import { chaveEntrada, gravarCacheIA, lerCacheIA, type OfertaBruta } from "./cache-ia.ts";
-import { chaveLeg } from "./geo.ts";
 import { comprimirImagens } from "./imagem.ts";
 import { novoId } from "./storage.ts";
 
-// ---------------------------------------------------------------------------
-// Rotas: cada trecho A→B é consultado ao Google uma única vez.
-//  1) memória da sessão      (instantâneo; inclui estimativas)
-//  2) localStorage           (60 dias, até 400 trechos)
-//  3) Google Routes          (só se não estiver em nenhum dos dois)
-// Pedidos iguais feitos ao mesmo tempo viram um só.
-// ---------------------------------------------------------------------------
-
 const CACHE_KEY = "fretemax:rotas";
-const VALIDADE_MS = 60 * 24 * 3600 * 1000;
-const MAX_TRECHOS = 400;
 
-type Registro = { leg: Leg; t: number };
-const ZERO: Leg = { km: 0, min: 0, tollRS: 0, estimado: false };
-
-const memoria = new Map<string, Leg>();
-const emVoo = new Map<string, Promise<Leg>>();
-let persistido: Map<string, Registro> | null = null;
-let timerGravar: ReturnType<typeof setTimeout> | null = null;
-
-function carregar(): Map<string, Registro> {
-  if (persistido) return persistido;
-  persistido = new Map();
+function lerCache(): Record<string, Leg> {
   try {
-    const raw = JSON.parse(localStorage.getItem(CACHE_KEY) ?? "{}") as Record<string, Registro | Leg>;
-    for (const [k, v] of Object.entries(raw)) {
-      // formato antigo guardava o Leg direto, sem data: aceita e carimba agora
-      if (v && typeof v === "object" && "leg" in v) persistido.set(k, v as Registro);
-      else if (v && typeof v === "object" && "km" in v) persistido.set(k, { leg: v as Leg, t: Date.now() });
-    }
+    return JSON.parse(localStorage.getItem(CACHE_KEY) ?? "{}");
   } catch {
-    /* cache corrompido: começa vazio */
+    return {};
   }
-  return persistido;
 }
 
-function agendarGravacao() {
-  if (timerGravar) return;
-  timerGravar = setTimeout(() => {
-    timerGravar = null;
-    const mapa = carregar();
-    const agora = Date.now();
-    const vivos = [...mapa.entries()].filter(([, r]) => agora - r.t <= VALIDADE_MS);
-    vivos.sort((a, b) => b[1].t - a[1].t);
-    const cortados = vivos.slice(0, MAX_TRECHOS);
-    persistido = new Map(cortados);
-    try {
-      localStorage.setItem(CACHE_KEY, JSON.stringify(Object.fromEntries(cortados)));
-    } catch {
-      /* sem espaço: continua só com a memória */
-    }
-  }, 400);
-}
+const r4 = (n: number) => n.toFixed(4);
+/** Chave de um trecho por par de coordenadas (mesma regra usada em lib/rota.ts). */
+export const chaveLocais = (a: Local, b: Local) => `${r4(a.lat)},${r4(a.lng)}>${r4(b.lat)},${r4(b.lng)}`;
 
-/** Distância/tempo/pedágio entre dois locais, com cache. */
+/** Distância/tempo/pedágio entre dois locais. Guarda no cache: cada par é consultado uma vez só. */
 export async function getLeg(a: Local, b: Local): Promise<Leg> {
-  if (a.id === b.id) return ZERO;
-  const k = chaveLeg(a, b);
+  if (a.id === b.id) return { km: 0, min: 0, tollRS: 0, estimado: false };
+  const cache = lerCache();
+  const k = chaveLocais(a, b);
+  // estimativas não ficam em cache, para serem refeitas quando a chave do Google for configurada
+  if (cache[k] && !cache[k].estimado && cache[k].poly) return cache[k];
 
-  const naMemoria = memoria.get(k);
-  if (naMemoria) return naMemoria;
-
-  const guardado = carregar().get(k);
-  // estimativa nunca fica em disco (para ser refeita quando a chave do Google for configurada)
-  if (guardado && !guardado.leg.estimado && guardado.leg.poly && Date.now() - guardado.t <= VALIDADE_MS) {
-    memoria.set(k, guardado.leg);
-    return guardado.leg;
-  }
-
-  const pendente = emVoo.get(k);
-  if (pendente) return pendente;
-
-  const p = (async () => {
-    const r = await fetch("/api/route", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ origem: { lat: a.lat, lng: a.lng }, destino: { lat: b.lat, lng: b.lng } }),
-    });
-    if (!r.ok) throw new Error("Falha ao calcular a rota.");
-    const leg = (await r.json()) as Leg;
-    memoria.set(k, leg);
-    if (!leg.estimado) {
-      carregar().set(k, { leg, t: Date.now() });
-      agendarGravacao();
+  const r = await fetch("/api/route", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ origem: { lat: a.lat, lng: a.lng }, destino: { lat: b.lat, lng: b.lng } }),
+  });
+  if (!r.ok) throw new Error("Falha ao calcular a rota.");
+  const leg = (await r.json()) as Leg;
+  if (!leg.estimado) {
+    cache[k] = leg;
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+    } catch {
+      /* ignora */
     }
-    return leg;
-  })();
-  emVoo.set(k, p);
-  try {
-    return await p;
-  } finally {
-    emVoo.delete(k);
   }
+  return leg;
 }
 
-/** Quantos trechos reais estão guardados (para mostrar na tela de conta/ajustes). */
-export function totalTrechosEmCache(): number {
-  return carregar().size;
-}
-
-export function limparCacheRotas() {
-  memoria.clear();
-  persistido = new Map();
-  try {
-    localStorage.removeItem(CACHE_KEY);
-  } catch {
-    /* ignora */
+/**
+ * Busca vários trechos de uma vez, sem repetir consulta para o mesmo par de coordenadas.
+ * O planejador de rota (lib/rota.ts) testa milhares de ORDENS possíveis para as mesmas
+ * cargas, mas todas essas ordens usam os mesmos trechos entre pontos — então aqui cada
+ * trecho único é buscado (API ou cache do navegador) uma vez só, e o cálculo das ordens
+ * em si não faz nenhuma chamada extra.
+ */
+export async function getLegsMapa(pares: [Local, Local][]): Promise<Map<string, Leg>> {
+  const unicos = new Map<string, [Local, Local]>();
+  for (const [a, b] of pares) {
+    if (a.id === b.id) continue;
+    const k = chaveLocais(a, b);
+    if (!unicos.has(k)) unicos.set(k, [a, b]);
   }
+  const entradas = [...unicos.entries()];
+  const legs = await Promise.all(entradas.map(([, [a, b]]) => getLeg(a, b)));
+  const mapa = new Map<string, Leg>();
+  entradas.forEach(([k], i) => mapa.set(k, legs[i]));
+  return mapa;
 }
 
 // ---------------------------------------------------------------------------
-// IA: lê as ofertas de um texto/print. Entrada repetida = resposta guardada.
+// A leitura da IA (Gemini) custa tempo e uma chamada paga. Guarda a resposta em
+// memória pelo conteúdo exato (texto + prints): se o motorista sair da tela de
+// Cargas — por exemplo pra ajustar o Caminhão — e a mesma mensagem/print for
+// analisada de novo, o app reaproveita a resposta em vez de mandar tudo de novo
+// pro Gemini. Fica só na memória da aba (não precisa persistir): o objetivo é
+// não gastar de novo dentro da mesma sessão, não sobreviver a um fechar de app.
 // ---------------------------------------------------------------------------
+const cacheExtracao = new Map<string, Omit<Oferta, "id">[]>();
 
-export async function extrairOfertasComInfo(
-  texto: string,
-  imagens: File[],
-): Promise<{ ofertas: Oferta[]; doCache: boolean }> {
-  const chave = await chaveEntrada(texto, imagens);
-  const guardado = lerCacheIA(chave);
-  if (guardado) {
-    return { ofertas: guardado.map((o) => ({ ...o, id: novoId() })), doCache: true };
-  }
+function chaveConteudo(texto: string, imagens: File[]): string {
+  const partes = [texto.trim()];
+  for (const f of imagens) partes.push(`${f.name}:${f.size}:${f.lastModified}`);
+  return partes.join("|");
+}
+
+export async function extrairOfertas(texto: string, imagens: File[]): Promise<Oferta[]> {
+  const chave = chaveConteudo(texto, imagens);
+  const doCache = cacheExtracao.get(chave);
+  if (doCache) return doCache.map((o) => ({ ...o, id: novoId() }));
 
   const fd = new FormData();
   fd.set("texto", texto);
@@ -135,19 +91,14 @@ export async function extrairOfertasComInfo(
   const r = await fetch("/api/extract", { method: "POST", body: fd });
   const data = await r.json();
   if (!r.ok) throw new Error(data?.error ?? "Erro ao ler a mensagem.");
-
-  const brutas = (data.ofertas as Omit<Oferta, "id">[]).map((o) => ({
+  const semId: Omit<Oferta, "id">[] = (data.ofertas as Omit<Oferta, "id">[]).map((o) => ({
     ...o,
     carregamentoAte: o.carregamentoAte ?? null,
     descargaAte: o.descargaAte ?? null,
     contato: o.contato ?? null,
-  })) as OfertaBruta[];
-  gravarCacheIA(chave, brutas);
-  return { ofertas: brutas.map((o) => ({ ...o, id: novoId() })), doCache: false };
-}
-
-export async function extrairOfertas(texto: string, imagens: File[]): Promise<Oferta[]> {
-  return (await extrairOfertasComInfo(texto, imagens)).ofertas;
+  }));
+  cacheExtracao.set(chave, semId);
+  return semId.map((o) => ({ ...o, id: novoId() }));
 }
 
 export async function geocodificar(endereco: string): Promise<{ lat: number; lng: number; formatado: string }> {
@@ -158,5 +109,17 @@ export async function geocodificar(endereco: string): Promise<{ lat: number; lng
   });
   const data = await r.json();
   if (!r.ok) throw new Error(data?.error ?? "Não consegui localizar o endereço.");
+  return data;
+}
+
+/** Transforma coordenadas do GPS num endereço legível (geocodificação reversa). */
+export async function geocodificarReverso(lat: number, lng: number): Promise<{ lat: number; lng: number; formatado: string }> {
+  const r = await fetch("/api/geocode", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ lat, lng }),
+  });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data?.error ?? "Não consegui identificar o endereço dessas coordenadas.");
   return data;
 }

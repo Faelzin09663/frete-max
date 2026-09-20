@@ -1,8 +1,10 @@
 import { calcular, parseHora } from "../lib/calc.ts";
-import { acharLocal, adicionarSinonimo, candidatosLocais, ehAmbiguo, resolverLocal } from "../lib/match.ts";
+import { acharLocal } from "../lib/match.ts";
 import { decodePolyline } from "../lib/polyline.ts";
 import { montarMapa } from "../lib/mapa.ts";
+import { avaliarSequencia, chaveTrecho, gerarSequencias, paresParaSequencia } from "../lib/rota.ts";
 import type { Oferta, Truck, Local } from "../lib/types.ts";
+import type { ParadaCarga } from "../lib/rota.ts";
 
 const truck: Truck = {
   nome: "t", capacidadeT: 30, eixos: 6, consumoCheioKmL: 2, consumoVazioKmL: 3,
@@ -90,23 +92,52 @@ eq("alerta consumo zerado", alertaConsumoZerado.avisos.some((a) => a.includes("C
 const alertaFreteBaixo = calcular({ oferta: { ...base, valor: 30 }, truck, toneladas: 30, vazio: leg(0, 0), cheio: leg(250, 200), ...semData });
 eq("alerta frete baixo para longa distância", alertaFreteBaixo.avisos.some((a) => a.includes("muito baixo")), true);
 
-// ---------- vários locais com o mesmo nome (ex.: 3 mineradoras em Sete Lagoas) ----------
-const mina = (id: string, ap: string, sin: string[] = []): Local => ({ id, apelido: ap, sinonimos: sin, endereco: `${ap}, Sete Lagoas`, lat: 0, lng: 0 });
-const tres = [mina("m1", "Mineradora Alfa", ["Sete Lagoas"]), mina("m2", "Mineradora Beta", ["Sete Lagoas"]), mina("m3", "Mineradora Gama", ["Sete Lagoas"])];
-eq("3 candidatos exatos para 'Sete Lagoas'", candidatosLocais("Sete Lagoas", tres).map((c) => c.local.id), ["m1", "m2", "m3"]);
-eq("é ambíguo", ehAmbiguo("Sete Lagoas", tres), true);
-eq("nome único não é ambíguo", ehAmbiguo("Mineradora Beta", tres), false);
-eq("sem escolha: usa o 1º (reconhecimento por nome)", resolverLocal("Sete Lagoas", null, tres)?.id, "m1");
-eq("escolha manual vale mais que o nome", resolverLocal("Sete Lagoas", "m2", tres)?.id, "m2");
-eq("escolha manual vale mesmo com nome diferente", resolverLocal("Xyz desconhecido", "m3", tres)?.id, "m3");
-eq("local escolhido e depois apagado: volta ao nome", resolverLocal("Sete Lagoas", "apagado", tres)?.id, "m1");
-eq("nada escolhido e nada reconhecido", resolverLocal("Xyz", null, tres), null);
-eq("exato vem antes de parecido", candidatosLocais("Sete Lagoas", [mina("p", "Posto Sete Lagoas Norte"), mina("e", "Sete Lagoas")]).map((c) => c.local.id), ["e", "p"]);
-const lembrado = adicionarSinonimo(tres[1], "Extrativa");
-eq("lembrar nome: vira sinônimo", lembrado.sinonimos, ["Sete Lagoas", "Extrativa"]);
-eq("lembrar nome: sem duplicar", adicionarSinonimo(lembrado, " extrativa ") === lembrado, true);
-eq("lembrar nome vazio não muda nada", adicionarSinonimo(tres[0], "  ") === tres[0], true);
-eq("depois de lembrar, 'Extrativa' acha a Beta", acharLocal("EXTRATIVA", [tres[0], lembrado, tres[2]])?.id, "m2");
+// ---- Planejador de rota em sequência (lib/rota.ts) ----
+const casa = L("casa", -19.0, -44.0);
+const slO = L("sl-o", -19.1, -44.1);
+const slD = L("sl-d", -19.2, -44.2);
+const cgO = L("cg-o", -20.0, -43.9);
+const cgD = L("cg-d", -20.1, -43.8);
+
+const cargaSL: Oferta = { ...base, id: "sl", valor: 45, unidade: "TONELADA", carregamentoAte: null };
+const cargaCG: Oferta = { ...base, id: "cg", valor: 45, unidade: "TONELADA", carregamentoAte: null };
+const paradasRota: ParadaCarga[] = [
+  { oferta: cargaSL, origem: slO, destino: slD },
+  { oferta: cargaCG, origem: cgO, destino: cgD },
+];
+
+// pares únicos que a sequência pede: pos->origem, cheio e destino->base por carga (3x2=6),
+// mais o cruzamento entre as 2 cargas (destino de uma -> origem da outra, 2 pares) = 8
+eq("pares para sequência: 8 pares únicos", paresParaSequencia(casa, paradasRota, casa).length, 8);
+
+const legs = new Map<string, ReturnType<typeof leg>>();
+const set = (a: Local, b: Local, l: ReturnType<typeof leg>) => legs.set(chaveTrecho(a, b), l);
+set(casa, slO, leg(50, 50));
+set(slO, slD, leg(30, 30));
+set(slD, cgO, leg(20, 20)); // barato encadear Sete Lagoas -> Congonhas
+set(cgO, cgD, leg(40, 40));
+set(cgD, casa, leg(60, 60));
+set(casa, cgO, leg(200, 200)); // caro ir direto pra Congonhas primeiro
+set(cgD, slO, leg(300, 300)); // caro voltar pra Sete Lagoas depois de Congonhas
+set(slD, casa, leg(80, 80));
+
+const resSeq = gerarSequencias({
+  paradas: paradasRota, truck, toneladas: 30, pos: casa, base: casa, legs, agoraMin: null, maxParadas: 4, ordenarPor: "LUCRO",
+});
+eq("sequência: 2 cargas => 4 ordens testadas", resSeq.combinacoesTestadas, 4); // {SL},{CG},{SL,CG},{CG,SL}
+eq("sequência: melhor ordem é Sete Lagoas -> Congonhas", resSeq.melhores[0].etapas.map((e) => e.oferta.id), ["sl", "cg"]);
+eq("sequência: nada fica de fora da melhor", resSeq.foraDaRota.length, 0);
+eq("sequência: soma o frete das 2 cargas", resSeq.melhores[0].receitaRS, 45 * 30 * 2);
+
+// Encadeamento de horário: sai às 7:00 (420min), 50min até a origem -> chega 7:50.
+const cargaComFolga: ParadaCarga = { oferta: { ...cargaSL, carregamentoAte: "08:30" }, origem: slO, destino: slD };
+const seqNoLimite = avaliarSequencia([cargaComFolga], truck, 30, casa, null, legs, 7 * 60);
+eq("sequência viabilidade OK (folga 40min)", seqNoLimite.etapas[0].viabilidade, "OK");
+
+const cargaApertada: ParadaCarga = { oferta: { ...cargaSL, carregamentoAte: "07:30" }, origem: slO, destino: slD };
+const seqInviavel = avaliarSequencia([cargaApertada], truck, 30, casa, null, legs, 7 * 60);
+eq("sequência viabilidade inviável (chega depois do limite)", seqInviavel.etapas[0].viabilidade, "INVIAVEL");
+eq("sequência geral fica inviável junto", seqInviavel.viabilidade, "INVIAVEL");
 
 console.log(falhas === 0 ? "\nTodos os testes passaram." : `\n${falhas} falha(s).`);
 process.exit(falhas ? 1 : 0);
