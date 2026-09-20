@@ -405,6 +405,17 @@ function CargasConteudo() {
     return (
       <ReviewScreen
         ofertas={ofertasBrutas}
+        locais={locais}
+        onNovoLocal={(l) => setLocais((prev) => [...prev, l])}
+        onLembrarNome={(localId, nome) => {
+          setLocais((prev) =>
+            prev.map((x) =>
+              x.id === localId && !x.sinonimos.includes(nome)
+                ? { ...x, sinonimos: [...x.sinonimos, nome] }
+                : x
+            )
+          );
+        }}
         onConfirmar={confirmarRevisao}
         onVoltar={voltarParaInput}
       />

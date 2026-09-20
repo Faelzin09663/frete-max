@@ -83,3 +83,15 @@ export function montarMapaSequencia(
 
   return { segmentos, marcadores, linkGoogle: u.toString() };
 }
+
+import type { Plano } from "./plano.ts";
+
+export function montarMapaPlano(plano: Plano): MapaDados {
+  const etapas = plano.passos.map(s => ({
+    origem: s.carga.origem,
+    destino: s.carga.destino,
+    vazio: s.vazio,
+    cheio: s.cheio
+  }));
+  return montarMapaSequencia(plano.inicio, etapas, plano.fim, plano.retorno);
+}
