@@ -22,6 +22,10 @@ function EditCard({
   onLembrar,
   onNovoLocal,
   onChange,
+  compartilharEmpresa,
+  compartilharGrupo,
+  onCompartilharEmpresa,
+  onCompartilharGrupo,
 }: {
   oferta: Oferta;
   index: number;
@@ -31,12 +35,50 @@ function EditCard({
   onLembrar: (lado: "o" | "d", v: boolean) => void;
   onNovoLocal: (l: Local) => void | Promise<void>;
   onChange: (patch: Partial<Oferta>) => void;
+  compartilharEmpresa: boolean;
+  compartilharGrupo: boolean;
+  onCompartilharEmpresa: (usar: boolean) => void;
+  onCompartilharGrupo: (usar: boolean) => void;
 }) {
   return (
     <article className="review-card">
       <div className="review-header">
         <span className="review-num">{index + 1}</span>
         <strong>Carga {index + 1}</strong>
+      </div>
+
+      <div className="review-grid">
+        <div className="review-field">
+          <label>Empresa</label>
+          <input
+            value={oferta.empresa ?? ""}
+            onChange={(e) => onChange({ empresa: e.target.value || null })}
+            placeholder="Ex.: MBL Transportes"
+          />
+          {index === 0 && (
+            <label className="review-share">
+              <input type="checkbox" checked={compartilharEmpresa} onChange={(e) => onCompartilharEmpresa(e.target.checked)} />
+              Usar esta empresa em todas as cargas
+            </label>
+          )}
+        </div>
+        <div className={`review-field ${oferta.grupo == null ? "ai-guess" : ""}`}>
+          <label>
+            Grupo de origem
+            {oferta.grupo == null && <span className="ai-tag">IA não identificou</span>}
+          </label>
+          <input
+            value={oferta.grupo ?? ""}
+            onChange={(e) => onChange({ grupo: e.target.value || null })}
+            placeholder="Ex.: Fretes BH"
+          />
+          {index === 0 && (
+            <label className="review-share">
+              <input type="checkbox" checked={compartilharGrupo} onChange={(e) => onCompartilharGrupo(e.target.checked)} />
+              Usar este grupo em todas as cargas
+            </label>
+          )}
+        </div>
       </div>
 
       <div className="review-grid">
@@ -167,6 +209,8 @@ export function ReviewScreen({
   // "lembrar este nome para o local escolhido" (começa desligado: nomes genéricos como
   // "Sete Lagoas" não devem virar sinônimo de uma mineradora só)
   const [lembrar, setLembrar] = useState<Record<string, boolean>>({});
+  const [compartilharEmpresa, setCompartilharEmpresa] = useState(false);
+  const [compartilharGrupo, setCompartilharGrupo] = useState(false);
 
   function confirmar() {
     for (const o of editadas) {
@@ -177,11 +221,28 @@ export function ReviewScreen({
   }
 
   function atualizar(index: number, patch: Partial<Oferta>) {
-    setEditadas((prev) => prev.map((o, i) => (i === index ? { ...o, ...patch } : o)));
+    setEditadas((prev) =>
+      prev.map((o, i) => {
+        if (i === index) return { ...o, ...patch };
+        if (index === 0 && compartilharEmpresa && "empresa" in patch) return { ...o, empresa: patch.empresa ?? null };
+        if (index === 0 && compartilharGrupo && "grupo" in patch) return { ...o, grupo: patch.grupo ?? null };
+        return o;
+      }),
+    );
+  }
+
+  function definirEmpresaCompartilhada(usar: boolean) {
+    setCompartilharEmpresa(usar);
+    if (usar) setEditadas((prev) => prev.map((o, i) => (i === 0 ? o : { ...o, empresa: prev[0]?.empresa ?? null })));
+  }
+
+  function definirGrupoCompartilhado(usar: boolean) {
+    setCompartilharGrupo(usar);
+    if (usar) setEditadas((prev) => prev.map((o, i) => (i === 0 ? o : { ...o, grupo: prev[0]?.grupo ?? null })));
   }
 
   const temDeduzido = editadas.some(
-    (o) => foiDeduzido(o, "unidade") || foiDeduzido(o, "pedagio") || foiDeduzido(o, "valor"),
+    (o) => foiDeduzido(o, "unidade") || foiDeduzido(o, "pedagio") || foiDeduzido(o, "valor") || o.grupo == null,
   );
 
   return (
@@ -219,6 +280,10 @@ export function ReviewScreen({
           onLembrar={(lado, v) => setLembrar((prev) => ({ ...prev, [`${o.id}:${lado}`]: v }))}
           onNovoLocal={onNovoLocal}
           onChange={(p) => atualizar(i, p)}
+          compartilharEmpresa={editadas.length > 1 && compartilharEmpresa}
+          compartilharGrupo={editadas.length > 1 && compartilharGrupo}
+          onCompartilharEmpresa={definirEmpresaCompartilhada}
+          onCompartilharGrupo={definirGrupoCompartilhado}
         />
       ))}
 

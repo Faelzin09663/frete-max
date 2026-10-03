@@ -11,24 +11,30 @@ import type { Local } from "@/lib/types.ts";
 export function LocalForm({
   apelidoInicial = "",
   sinonimoInicial = "",
+  localInicial,
   onSalvar,
+  onCancelar,
   rotulo = "Salvar local",
 }: {
   apelidoInicial?: string;
   sinonimoInicial?: string;
+  localInicial?: Local;
   onSalvar: (l: Local) => void;
+  onCancelar?: () => void;
   rotulo?: string;
 }) {
   const uid = useId();
-  const [apelido, setApelido] = useState(apelidoInicial);
-  const [sinonimos, setSinonimos] = useState(sinonimoInicial);
-  const [endereco, setEndereco] = useState("");
+  const [apelido, setApelido] = useState(localInicial?.apelido ?? apelidoInicial);
+  const [sinonimos, setSinonimos] = useState(localInicial?.sinonimos.join(", ") ?? sinonimoInicial);
+  const [endereco, setEndereco] = useState(localInicial?.endereco ?? "");
   const [erro, setErro] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   // Coordenadas exatas do GPS, quando o endereço veio do botão "usar minha localização".
   // Editar o campo de endereço à mão descarta essas coordenadas (volta a geocodificar o texto).
-  const [coordsGps, setCoordsGps] = useState<{ lat: number; lng: number } | null>(null);
+  const [coordsGps, setCoordsGps] = useState<{ lat: number; lng: number } | null>(
+    localInicial ? { lat: localInicial.lat, lng: localInicial.lng } : null,
+  );
   const [buscandoGps, setBuscandoGps] = useState(false);
   // Geolocation só existe no navegador: decide depois de montar, pra não divergir do HTML do servidor.
   const [gpsDisponivel, setGpsDisponivel] = useState(false);
@@ -74,7 +80,7 @@ export function LocalForm({
         formatado = g.formatado;
       }
       onSalvar({
-        id: novoId(),
+        id: localInicial?.id ?? novoId(),
         apelido: apelido.trim(),
         sinonimos: sinonimos.split(",").map((s) => s.trim()).filter(Boolean),
         endereco: formatado,
@@ -134,11 +140,16 @@ export function LocalForm({
         <input id={`${uid}-sin`} value={sinonimos} onChange={(e) => setSinonimos(e.target.value)} placeholder="Ex.: Mina Extrativa, Extrativa Mineral" />
       </Field>
       {erro && <Note tone="loss">{erro}</Note>}
-      <div style={{ marginTop: 16 }}>
+      <div className={onCancelar ? "grid2" : undefined} style={{ marginTop: 16 }}>
         <button type="button" className="btn block" onClick={salvar} disabled={busy}>
           {busy ? <span className="spinner" aria-hidden="true" /> : <Icon name="pin" size={20} />}
           {busy ? "Buscando endereço..." : rotulo}
         </button>
+        {onCancelar && (
+          <button type="button" className="btn ghost block" onClick={onCancelar} disabled={busy}>
+            Cancelar
+          </button>
+        )}
       </div>
     </div>
   );

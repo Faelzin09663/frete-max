@@ -96,6 +96,8 @@ export async function extrairOfertas(texto: string, imagens: File[]): Promise<Of
     carregamentoAte: o.carregamentoAte ?? null,
     descargaAte: o.descargaAte ?? null,
     contato: o.contato ?? null,
+    empresa: o.empresa ?? null,
+    grupo: o.grupo ?? null,
   }));
   cacheExtracao.set(chave, semId);
   return semId.map((o) => ({ ...o, id: novoId() }));

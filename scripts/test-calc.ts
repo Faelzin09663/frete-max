@@ -14,7 +14,7 @@ const truck: Truck = {
 const base: Oferta = {
   id: "1", origemTexto: "", destinoTexto: "", valor: 45, unidade: "TONELADA",
   pedagio: "REEMBOLSADO", carregamentoAte: "11:30", descargaAte: null,
-  agendamento: "PLACA_MARCADA", observacoes: "", contato: null,
+  agendamento: "PLACA_MARCADA", observacoes: "", contato: null, empresa: null, grupo: null,
 };
 const leg = (km: number, min: number, tollRS = 0) => ({ km, min, tollRS, estimado: false });
 

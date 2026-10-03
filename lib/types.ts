@@ -19,6 +19,7 @@ export type Local = {
   endereco: string;
   lat: number;
   lng: number;
+  atualizadoEm?: string;
 };
 
 export type Unidade = "TONELADA" | "VIAGEM" | "DESCONHECIDA";
@@ -28,6 +29,8 @@ export type Agendamento = "PLACA_MARCADA" | "SEM_AGENDAMENTO" | "NAO_INFORMADO";
 /** O que a IA extrai de cada oferta de carga. */
 export type Oferta = {
   id: string;
+  empresa: string | null; // transportadora/empresa que divulgou a oferta
+  grupo: string | null; // grupo do WhatsApp de onde veio a mensagem (livre, editável)
   origemTexto: string;
   destinoTexto: string;
   valor: number | null;
@@ -115,4 +118,39 @@ export type MapaDados = {
   segmentos: { tipo: "VAZIO" | "CHEIO"; pontos: Ponto[] }[];
   marcadores: { nome: string; lat: number; lng: number; papel: "POSICAO" | "ORIGEM" | "DESTINO" | "BASE" }[];
   linkGoogle: string;
+};
+
+/** Uma carga analisada, salva no histórico (tela "Cargas"). Snapshot do momento da análise. */
+export type StatusCarga = "ANALISADA" | "ESCOLHIDA";
+
+export type CargaSalva = {
+  id: string; // mesmo id da Oferta que originou esta análise
+  empresa: string | null;
+  grupo: string | null;
+  origemTexto: string;
+  destinoTexto: string;
+  valor: number | null;
+  unidade: Unidade;
+  pedagio: Pedagio;
+  agendamento: Agendamento;
+  carregamentoAte: string | null;
+  descargaAte: string | null;
+  observacoes: string;
+  contato: string | null;
+  // snapshot do cálculo no momento salvo
+  origemLocalId: string | null;
+  destinoLocalId: string | null;
+  lucroRS: number | null;
+  lucroPorHoraRS: number | null;
+  kmVazio: number | null;
+  kmCheio: number | null;
+  kmRetorno: number | null;
+  kmTotal: number | null;
+  horas: number | null;
+  pctVazio: number | null;
+  // metadados
+  status: StatusCarga;
+  viagemId: string | null;
+  analisadaEm: string; // ISO
+  mensagemOriginal: string | null; // texto colado que originou esta carga
 };

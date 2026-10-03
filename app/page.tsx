@@ -17,10 +17,10 @@ import { GPS_ATUAL_ID, geolocalizacaoDisponivel, obterCoordenadasAtuais } from "
 import { acharLocal, normalizar } from "@/lib/match.ts";
 import { montarMapa, montarMapaSequencia } from "@/lib/mapa.ts";
 import { fmtNum } from "@/lib/format.ts";
-import { useLocais, useTruck, useViagens, novoId } from "@/lib/storage.ts";
+import { useLocais, useTruck, useViagens, useCargas, novoId } from "@/lib/storage.ts";
 import { useAnalise, type Mensagem } from "@/lib/analise.tsx";
 import { gerarSequencias, paresParaSequencia, type ParadaCarga, type ResultadoRotas } from "@/lib/rota.ts";
-import type { CalcResult, Leg, Local, MapaDados, Oferta, Viagem } from "@/lib/types.ts";
+import type { CalcResult, CargaSalva, Leg, Local, MapaDados, Oferta, Viagem } from "@/lib/types.ts";
 
 type Linha = { oferta: Oferta; origem: Local | null; destino: Local | null; calc: CalcResult | null; mapa?: MapaDados };
 
@@ -68,6 +68,7 @@ function CargasConteudo() {
   const [truck, , truckPronto] = useTruck();
   const [locais, setLocais, locaisPronto] = useLocais();
   const [, setViagens] = useViagens();
+  const [, setCargas, cargasPronto] = useCargas();
 
   // Estado da análise: fica no contexto (lib/analise.tsx), fora desta página, então
   // não se perde se o motorista for em Caminhão ajustar os custos e voltar.
@@ -275,9 +276,62 @@ function CargasConteudo() {
     setOfertas((prev) => prev.map((o) => (o.id === id ? { ...o, ...patch } : o)));
   }
 
+  // Salva cada carga calculada no histórico (tela "Cargas"), mesmo as que o motorista não
+  // escolher. Reaproveita o próprio id da oferta, então recalcular (ex.: mudar toneladas)
+  // atualiza a mesma linha em vez de duplicar, e o status "Escolhida" nunca é desfeito aqui.
+  useEffect(() => {
+    if (fase !== "RESULTADO" || !cargasPronto) return;
+    const comCalc = linhas.filter((l): l is Linha & { calc: CalcResult } => !!l.calc);
+    if (comCalc.length === 0) return;
+    const textoMsg = mensagens[0]?.texto?.trim() || null;
+    setCargas((prev) => {
+      const porId = new Map(prev.map((c) => [c.id, c]));
+      let mudou = false;
+      for (const l of comCalc) {
+        const existente = porId.get(l.oferta.id);
+        const nova: CargaSalva = {
+          id: l.oferta.id,
+          empresa: l.oferta.empresa,
+          grupo: l.oferta.grupo,
+          origemTexto: l.oferta.origemTexto,
+          destinoTexto: l.oferta.destinoTexto,
+          valor: l.oferta.valorManual ?? l.oferta.valor,
+          unidade: l.oferta.unidade,
+          pedagio: l.oferta.pedagio,
+          agendamento: l.oferta.agendamento,
+          carregamentoAte: l.oferta.carregamentoAte,
+          descargaAte: l.oferta.descargaAte,
+          observacoes: l.oferta.observacoes,
+          contato: l.oferta.contato,
+          origemLocalId: l.origem?.id ?? null,
+          destinoLocalId: l.destino?.id ?? null,
+          lucroRS: l.calc.lucroRS,
+          lucroPorHoraRS: l.calc.lucroPorHoraRS,
+          kmVazio: l.calc.kmVazio,
+          kmCheio: l.calc.kmCheio,
+          kmRetorno: l.calc.kmRetorno,
+          kmTotal: l.calc.kmTotal,
+          horas: l.calc.horas,
+          pctVazio: l.calc.pctVazio,
+          status: existente?.status ?? "ANALISADA",
+          viagemId: existente?.viagemId ?? null,
+          analisadaEm: existente?.analisadaEm ?? new Date().toISOString(),
+          mensagemOriginal: existente?.mensagemOriginal ?? textoMsg,
+        };
+        if (!existente || JSON.stringify(existente) !== JSON.stringify(nova)) {
+          porId.set(l.oferta.id, nova);
+          mudou = true;
+        }
+      }
+      return mudou ? [...porId.values()] : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linhas, fase, cargasPronto]);
+
   function escolherCarga(linha: Linha & { calc: CalcResult }) {
+    const viagemId = novoId();
     const viagem: Viagem = {
-      id: novoId(),
+      id: viagemId,
       realizadaEm: new Date().toISOString(),
       status: "ESCOLHIDA",
       origem: linha.origem?.apelido ?? linha.oferta.origemTexto,
@@ -294,6 +348,7 @@ function CargasConteudo() {
       toneladas: ton,
     };
     setViagens((prev) => [viagem, ...prev]);
+    setCargas((prev) => prev.map((c) => (c.id === linha.oferta.id ? { ...c, status: "ESCOLHIDA", viagemId } : c)));
     router.push("/viagens");
   }
 

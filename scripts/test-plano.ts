@@ -20,7 +20,8 @@ const mont = L("mont", "Montes Claros", -16.73, -43.86);
 let n = 0;
 const oferta = (valor: number, extra: Partial<Oferta> = {}): Oferta => ({
   id: `o${++n}`, origemTexto: "", destinoTexto: "", valor, unidade: "TONELADA", pedagio: "REEMBOLSADO",
-  carregamentoAte: null, descargaAte: null, agendamento: "NAO_INFORMADO", observacoes: "", contato: null, ...extra,
+  carregamentoAte: null, descargaAte: null, agendamento: "NAO_INFORMADO", observacoes: "", contato: null,
+  empresa: null, grupo: null, ...extra,
 });
 const carga = (o: Local, d: Local, valor: number, extra: Partial<Oferta> = {}): Carga => ({ oferta: oferta(valor, extra), origem: o, destino: d });
 

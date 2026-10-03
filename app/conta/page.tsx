@@ -106,11 +106,13 @@ function BackupSection() {
 }
 
 function ContaConteudo() {
-  const { user, carregando, disponivel, entrar, sair } = useAuth();
-  const params = useSearchParams();
+  const { user, carregando, disponivel, entrar, cadastrar, sair } = useAuth();
+  useSearchParams();
+  const [modo, setModo] = useState<"ENTRAR" | "CADASTRAR">("ENTRAR");
+  const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
-  const [enviado, setEnviado] = useState(false);
-  const [erro, setErro] = useState<string | null>(params.get("erro") ? "O link expirou ou já foi usado. Peça um novo." : null);
+  const [senha, setSenha] = useState("");
+  const [erro, setErro] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   if (!disponivel) {
@@ -145,7 +147,8 @@ function ContaConteudo() {
               <small className="hint" style={{ margin: 0 }}>
                 Conectado como
               </small>
-              <strong>{user.email}</strong>
+              <strong>{String(user.user_metadata?.nome ?? user.email)}</strong>
+              {user.user_metadata?.nome && <small className="hint">{user.email}</small>}
             </div>
           </div>
           <ul className="perks">
@@ -169,14 +172,19 @@ function ContaConteudo() {
     );
   }
 
-  async function enviarLink() {
+  async function enviar() {
     setErro(null);
     setBusy(true);
     try {
-      await entrar(email.trim());
-      setEnviado(true);
+      if (modo === "CADASTRAR") {
+        if (!nome.trim()) throw new Error("Informe seu nome.");
+        if (senha.length < 8) throw new Error("A senha precisa ter pelo menos 8 caracteres.");
+        await cadastrar(nome.trim(), email.trim(), senha);
+      } else {
+        await entrar(email.trim(), senha);
+      }
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Erro ao enviar o link.");
+      setErro(e instanceof Error ? e.message : "Não foi possível entrar na conta.");
     } finally {
       setBusy(false);
     }
@@ -190,20 +198,32 @@ function ContaConteudo() {
         lead="Sem entrar, tudo fica só neste aparelho. Com e-mail, Caminhão e Locais ficam salvos e você usa o FreteMax em outro celular sem recadastrar."
       />
       <section className="card">
-        {enviado ? (
+        {false ? (
           <Note tone="gain" icon="check">
             Link enviado para <strong>{email}</strong>. Abra o e-mail neste celular e toque no link para entrar.
           </Note>
         ) : (
           <>
+            <div className="row" style={{ gap: 8, marginBottom: 16 }}>
+              <button type="button" className={`btn ${modo === "ENTRAR" ? "" : "ghost"} sm`} onClick={() => { setModo("ENTRAR"); setErro(null); }}>Entrar</button>
+              <button type="button" className={`btn ${modo === "CADASTRAR" ? "" : "ghost"} sm`} onClick={() => { setModo("CADASTRAR"); setErro(null); }}>Criar conta</button>
+            </div>
+            {modo === "CADASTRAR" && (
+              <Field label="Nome" htmlFor="nome">
+                <input id="nome" autoComplete="name" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Seu nome" />
+              </Field>
+            )}
             <Field label="E-mail" htmlFor="email">
               <input id="email" type="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="seuemail@exemplo.com" />
             </Field>
+            <Field label="Senha" htmlFor="senha">
+              <input id="senha" type="password" autoComplete={modo === "ENTRAR" ? "current-password" : "new-password"} value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="Mínimo de 8 caracteres" />
+            </Field>
             {erro && <Note tone="loss">{erro}</Note>}
             <div style={{ marginTop: 16 }}>
-              <button type="button" className="btn block" onClick={enviarLink} disabled={busy || !email.trim()}>
+              <button type="button" className="btn block" onClick={enviar} disabled={busy || !email.trim() || !senha}>
                 {busy ? <span className="spinner" aria-hidden="true" /> : <Icon name="cloud" size={20} />}
-                {busy ? "Enviando..." : "Receber link por e-mail"}
+                {busy ? "Aguarde..." : modo === "ENTRAR" ? "Entrar" : "Criar conta"}
               </button>
             </div>
           </>

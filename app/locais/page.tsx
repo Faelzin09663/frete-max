@@ -9,6 +9,7 @@ import { useLocais } from "@/lib/storage.ts";
 export default function LocaisPage() {
   const [locais, setLocais, pronto] = useLocais();
   const [novo, setNovo] = useState(false);
+  const [editandoId, setEditandoId] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
 
   const lista = useMemo(() => {
@@ -19,6 +20,7 @@ export default function LocaisPage() {
   }, [locais, busca]);
 
   const mostrarForm = novo || (pronto && locais.length === 0);
+  const editando = locais.find((l) => l.id === editandoId) ?? null;
 
   return (
     <>
@@ -50,6 +52,26 @@ export default function LocaisPage() {
           <Icon name="plus" size={22} />
           Cadastrar local
         </button>
+      )}
+
+      {editando && (
+        <section className="card" style={{ marginBottom: 16 }}>
+          <div className="row between" style={{ marginBottom: 6 }}>
+            <strong style={{ fontFamily: "var(--font-num)", fontSize: 22 }}>Editar local</strong>
+            <button type="button" className="btn ghost icon" onClick={() => setEditandoId(null)} aria-label="Fechar edição">
+              <Icon name="x" size={18} />
+            </button>
+          </div>
+          <LocalForm
+            localInicial={editando}
+            rotulo="Salvar alterações"
+            onCancelar={() => setEditandoId(null)}
+            onSalvar={(local) => {
+              setLocais((prev) => prev.map((l) => (l.id === local.id ? local : l)));
+              setEditandoId(null);
+            }}
+          />
+        </section>
       )}
 
       <h2>Cadastrados{locais.length > 0 ? ` (${locais.length})` : ""}</h2>
@@ -86,6 +108,17 @@ export default function LocaisPage() {
               </div>
             )}
           </div>
+          <button
+            type="button"
+            className="btn ghost icon"
+            aria-label={`Editar ${l.apelido}`}
+            onClick={() => {
+              setNovo(false);
+              setEditandoId(l.id);
+            }}
+          >
+            <Icon name="edit" size={18} />
+          </button>
           <button
             type="button"
             className="btn ghost icon"

@@ -4,7 +4,8 @@ import { usePathname } from "next/navigation";
 import { Icon, type IconName } from "@/components/Icons";
 
 const ITENS: { href: string; label: string; icon: IconName }[] = [
-  { href: "/", label: "Cargas", icon: "cargas" },
+  { href: "/", label: "Analise", icon: "bolt" },
+  { href: "/cargas", label: "Cargas", icon: "cargas" },
   { href: "/viagens", label: "Painel", icon: "painel" },
   { href: "/locais", label: "Locais", icon: "pin" },
   { href: "/caminhao", label: "Caminhão", icon: "truck" },

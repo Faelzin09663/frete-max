@@ -22,14 +22,19 @@ function rotaTexto(seq: Sequencia, posNome: string, baseNome: string | null): st
 }
 
 function Timeline({ seq, posNome, baseNome }: { seq: Sequencia; posNome: string; baseNome: string | null }) {
-  const paradas: { nome: string; papel: "POSICAO" | "ORIGEM" | "DESTINO" | "BASE"; viab?: string; margem?: number | null }[] = [
-    { nome: posNome, papel: "POSICAO" },
-  ];
+  const paradas: {
+    nome: string;
+    papel: "POSICAO" | "ORIGEM" | "DESTINO" | "BASE";
+    viab?: string;
+    margem?: number | null;
+    km?: number;
+    tipoKm?: "vazio" | "cheio";
+  }[] = [{ nome: posNome, papel: "POSICAO" }];
   seq.etapas.forEach((e) => {
-    paradas.push({ nome: e.origem.apelido, papel: "ORIGEM", viab: e.viabilidade, margem: e.margemMin });
-    paradas.push({ nome: e.destino.apelido, papel: "DESTINO" });
+    paradas.push({ nome: e.origem.apelido, papel: "ORIGEM", viab: e.viabilidade, margem: e.margemMin, km: e.vazio.km, tipoKm: "vazio" });
+    paradas.push({ nome: e.destino.apelido, papel: "DESTINO", km: e.cheio.km, tipoKm: "cheio" });
   });
-  if (seq.retorno && baseNome) paradas.push({ nome: baseNome, papel: "BASE" });
+  if (seq.retorno && baseNome) paradas.push({ nome: baseNome, papel: "BASE", km: seq.retorno.km, tipoKm: "vazio" });
 
   return (
     <div className="stops">
@@ -41,6 +46,11 @@ function Timeline({ seq, posNome, baseNome }: { seq: Sequencia; posNome: string;
               {p.papel === "POSICAO" ? "Sai de" : p.papel === "BASE" ? "Volta para" : p.papel === "ORIGEM" ? "Carrega em" : "Descarrega em"}
             </small>
             <strong>{p.nome}</strong>
+            {p.km != null && p.km > 0 && (
+              <small className="stop-km">
+                {fmtKm(p.km)} {p.tipoKm === "cheio" ? "carregado" : "vazio"}
+              </small>
+            )}
             {p.viab && (
               <span className={`chip ${p.viab === "OK" ? "gain" : p.viab === "ARRISCADO" ? "warn" : "loss"}`} style={{ marginTop: 6 }}>
                 {VIAB_TXT[p.viab]}

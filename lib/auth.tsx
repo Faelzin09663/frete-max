@@ -7,7 +7,8 @@ type AuthCtx = {
   user: User | null;
   carregando: boolean;
   disponivel: boolean; // false se o site não tem Supabase configurado
-  entrar: (email: string) => Promise<void>;
+  entrar: (email: string, senha: string) => Promise<void>;
+  cadastrar: (nome: string, email: string, senha: string) => Promise<void>;
   sair: () => Promise<void>;
 };
 
@@ -16,6 +17,7 @@ const Ctx = createContext<AuthCtx>({
   carregando: false,
   disponivel: false,
   entrar: async () => {},
+  cadastrar: async () => {},
   sair: async () => {},
 });
 
@@ -47,13 +49,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [disponivel]);
 
-  async function entrar(email: string) {
+  async function entrar(email: string, senha: string) {
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOtp({
+    const { error } = await supabase.auth.signInWithPassword({ email, password: senha });
+    if (error) throw error;
+  }
+
+  async function cadastrar(nome: string, email: string, senha: string) {
+    const supabase = createClient();
+    const { data, error } = await supabase.auth.signUp({
       email,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      password: senha,
+      options: { data: { nome } },
     });
     if (error) throw error;
+    if (!data.session) {
+      throw new Error("Cadastro criado, mas o Supabase exige confirmação de e-mail. Desative 'Confirm email' em Authentication > Providers > Email.");
+    }
   }
 
   async function sair() {
@@ -62,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }
 
-  return <Ctx.Provider value={{ user, carregando, disponivel, entrar, sair }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ user, carregando, disponivel, entrar, cadastrar, sair }}>{children}</Ctx.Provider>;
 }
 
 export const useAuth = () => useContext(Ctx);

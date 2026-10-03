@@ -60,8 +60,12 @@ export function OfferCard({
         <div className="stop from">
           <i className="pin" />
           <div>
-            <small>Carrega em</small>
+            <div className="stop-head">
+              <small>Carrega em</small>
+              {oferta.empresa && <span className="empresa-tag">{oferta.empresa}</span>}
+            </div>
             <strong>{origemNome}</strong>
+            {calc.kmVazio > 0 && <small className="stop-km">{fmtKm(calc.kmVazio)} vazio até aqui</small>}
           </div>
         </div>
         <div className="stop to">
@@ -69,12 +73,14 @@ export function OfferCard({
           <div>
             <small>Descarrega em</small>
             <strong>{destinoNome}</strong>
+            <small className="stop-km">{fmtKm(calc.kmCheio)} carregado</small>
           </div>
         </div>
       </div>
 
       <div className="chips">
         {oferta.origemMsg && <span className="chip">{oferta.origemMsg}</span>}
+        {oferta.grupo && <span className="chip">Grupo: {oferta.grupo}</span>}
         {valor != null && (
           <span className="chip">
             Frete {fmtRS(valor)}

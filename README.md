@@ -195,6 +195,23 @@ Código: [`lib/plano.ts`](lib/plano.ts) · Tela: [`components/PlanoPanel.tsx`](c
 
 ---
 
+## 🏢 Empresa, grupo e histórico de cargas
+
+Cada oferta lida pela IA agora também traz, quando dá pra identificar:
+
+- **Empresa**: a transportadora que divulgou a carga, mostrada ao lado do local de carregamento.
+- **Grupo de origem**: de qual grupo do WhatsApp veio a mensagem. É texto livre — quando a IA não
+  identifica, a tela de conferência pede pra você preencher (destacado em amarelo, como os demais
+  campos deduzidos).
+
+Toda carga calculada — escolhida ou não — fica salva na tela **Cargas** (`/cargas`), com filtro por
+período, status, empresa e grupo. É o histórico completo; o **Painel** (`/viagens`) continua sendo
+só as viagens que você de fato escolheu e registrou.
+
+Código: [`lib/storage.ts`](lib/storage.ts) (`useCargas`) · Tela: [`app/cargas/page.tsx`](app/cargas/page.tsx)
+
+---
+
 ## 🧰 Tecnologias
 
 <div align="center">

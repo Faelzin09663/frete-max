@@ -18,6 +18,8 @@ Regras:
 - agendamento: "PLACA_MARCADA" se disser placa marcada; "SEM_AGENDAMENTO" se disser chegar e carregar sem agendar; senão "NAO_INFORMADO".
 - observacoes: restrições importantes em uma frase curta (ex.: "Troca somente no posto", "Pagamento via PIX com foto do tíquete", "Pelo aplicativo betruck", "Carregamento amanhã de manhã"). Vazio se nada.
 - contato: telefone e nome, se houver.
+- empresa: nome da transportadora ou empresa que está divulgando a carga (ex.: "MBL TRANSPORTES", "MINAS PRIME TRANSPORTES"). Geralmente aparece em letras maiúsculas no início ou no fim do bloco da oferta. Se não encontrar, use null.
+- grupo: tente identificar de qual grupo do WhatsApp veio essa mensagem — pistas comuns: nome do grupo no topo de um print de conversa, menção explícita a um grupo ("Grupo Fretes BH"), ou um cabeçalho de divulgação recorrente. Se não conseguir identificar com confiança, use null.
 Ignore textos que não sejam ofertas de carga.`;
 
 const SCHEMA = {
@@ -38,6 +40,8 @@ const SCHEMA = {
           agendamento: { type: "STRING", enum: ["PLACA_MARCADA", "SEM_AGENDAMENTO", "NAO_INFORMADO"] },
           observacoes: { type: "STRING" },
           contato: { type: "STRING", nullable: true },
+          empresa: { type: "STRING", nullable: true },
+          grupo: { type: "STRING", nullable: true },
         },
         required: ["origemTexto", "destinoTexto", "valor", "unidade", "pedagio", "agendamento", "observacoes"],
       },
